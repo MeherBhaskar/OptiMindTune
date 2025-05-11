@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "optimindtune"
+version = "0.1.0"
+description = "An intelligent AutoML and hyperparameter optimization toolkit powered by AI agents"
+authors = ["Meher Bhaskar"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+scikit-learn = "^1.5.0"
+langchain = "0.2.16"
+langchain-huggingface = "0.0.3"
+optuna = "^3.6.0"
+pandas = "^2.2.0"
+numpy = "^1.26.0"
+huggingface_hub = "^0.23.0"
+pytest = "^8.2.0"
+mypy = "^1.10.0"
+sphinx = "^7.3.0"
+dotenv = "^0.9.9"
+
+[tool.poetry.dev-dependencies]
+black = "^24.4.0"
+isort = "^5.13.0"
+flake8 = "^7.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
