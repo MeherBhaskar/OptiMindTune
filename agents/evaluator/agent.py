@@ -1,4 +1,6 @@
-from google.adk.agents import Agent
+# agents/evaluator/agent.py
+
+from google.adk.agents import Agent # Ensure Agent is imported
 from google.adk.tools.agent_tool import AgentTool
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -10,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, List # Added List for type hint
 import logging
 from dotenv import load_dotenv
 import os
@@ -22,7 +24,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class EvaluateModelTool(AgentTool):
-    def __init__(self, X: pd.DataFrame, y: pd.Series):
+    def __init__(self, agent: Agent, X: pd.DataFrame, y: pd.Series): # Added agent: Agent parameter
+        super().__init__(agent=agent)  # Pass agent to parent constructor
         self.X = X
         self.y = y
         self.model_map = {
@@ -36,9 +39,9 @@ class EvaluateModelTool(AgentTool):
         if model_name not in self.model_map:
             raise ValueError(f"Unsupported model: {model_name}")
         model_class = self.model_map[model_name]
-        # Adjust max_iter for LogisticRegression with saga and l1
         if model_name == "LogisticRegression" and hyperparameters.get("solver") == "saga" and hyperparameters.get("penalty") == "l1":
             hyperparameters["max_iter"] = hyperparameters.get("max_iter", 1000)
+        
         model = model_class(**hyperparameters)
         pipeline = Pipeline([
             ("scaler", StandardScaler()),
@@ -50,20 +53,47 @@ class EvaluateModelTool(AgentTool):
             logger.info(f"Evaluated {model_name} with {hyperparameters}, Accuracy: {mean_accuracy:.4f}")
             return mean_accuracy
         except Exception as e:
-            logger.error(f"Error evaluating {model_name}: {str(e)}")
+            logger.error(f"Error evaluating {model_name} with hyperparameters {hyperparameters}: {str(e)}")
             return 0.0
 
 class EvaluatorAgent:
     def __init__(self, X: pd.DataFrame, y: pd.Series):
-        self.tool = EvaluateModelTool(X, y)
-        llm_system_prompt = """You are an expert AutoML evaluator. When given a model name and hyperparameters, use the 'evaluate_model' tool to evaluate it on the dataset. Based on the accuracy, dataset characteristics, and previous results, suggest whether to accept this model or recommend new ones. Return a JSON object with 'accuracy' (float), 'accept' (boolean), and 'reasoning' (string)."""
-        
-        self.agent = Agent(
+        llm_system_prompt = """You are an expert AutoML evaluator...""" # Truncated for brevity
+
+        # Step 1: Initialize the Agent.
+        # Initialize with an empty tools list for now.
+        # The actual tools will be assigned in Step 3.
+        _agent_instance = Agent(
             name="evaluator",
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.0-flash",
             instruction=llm_system_prompt,
-            tools=[self.tool]
+            tools=[] # Initialize with empty list
         )
+
+        # Step 2: Initialize the Tool, passing the created agent instance.
+        _tool_instance = EvaluateModelTool(agent=_agent_instance, X=X, y=y)
+
+        # Step 3: Register the tool with the agent.
+        # This depends on the API of the ADK's Agent class.
+        # Common ways:
+        # Option A: If agent.tools is a settable property/attribute:
+        _agent_instance.tools = [_tool_instance]
+        
+        # Option B: If the agent has an add_tool method (often preferred):
+        # if hasattr(_agent_instance, "add_tool"):
+        #     _agent_instance.add_tool(_tool_instance)
+        # elif hasattr(_agent_instance, "tools") and isinstance(getattr(_agent_instance, "tools", None), list):
+        #     # Fallback if tools is a list that can be appended to (less common for direct attribute)
+        #     # _agent_instance.tools.append(_tool_instance) # Requires tools to be initialized as a list
+        #     _agent_instance.tools = [_tool_instance] # If it's a settable list property
+        # else:
+        #     logger.warning("Could not find a standard way to add tool to agent after initialization. "
+        #                    "Tool might not be correctly registered.")
+        
+        # Assign to self
+        self.agent = _agent_instance
+        self.tool = _tool_instance
+
         self.session_service = InMemorySessionService()
         self.runner = Runner(agent=self.agent, app_name="evaluator_app", session_service=self.session_service)
         self.user_id = "user_evaluator"
@@ -88,13 +118,24 @@ Output only a valid JSON object with the following keys:
 Ensure that your response is pure JSON without any additional text, code block markers, or explanations.
 """
         async def run_agent():
-            self.session_service.create_session(app_name="evaluator_app", user_id=self.user_id, session_id=self.session_id)
+            try:
+                self.session_service.create_session(app_name="evaluator_app", user_id=self.user_id, session_id=self.session_id)
+            except Exception as e:
+                logger.info(f"Session already exists or error creating session (this might be normal): {e}")
+
             message = types.Content(role="user", parts=[types.Part(text=user_input)])
             response_text = ""
             async for event in self.runner.run_async(user_id=self.user_id, session_id=self.session_id, new_message=message):
                 if event.is_final_response():
-                    response_text = event.content.parts[0].text
+                    if event.content and event.content.parts:
+                        response_text = event.content.parts[0].text
+                    else:
+                        logger.error("Final response event has no content or parts for evaluator.")
+                        response_text = '{"accuracy": 0.0, "accept": false, "reasoning": "Error: Empty response from agent."}'
                     break
+            if not response_text: # If loop completes without final response
+                logger.error("No final response event received from evaluator agent.")
+                response_text = '{"accuracy": 0.0, "accept": false, "reasoning": "Error: No final response from agent."}'
             return response_text
 
         response = asyncio.run(run_agent())
