@@ -15,6 +15,18 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def parse_llm_response(response_str: str) -> Any:
+    """Clean and parse LLM response, removing code block markers if present."""
+    if response_str.startswith("```json") and response_str.endswith("```"):
+        json_str = response_str[len("```json"):-len("```")].strip()
+    else:
+        json_str = response_str.strip()
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON: {e}, Raw response: {response_str}")
+        return None
+
 def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, accuracy_threshold: float = 0.99) -> List[Dict[str, Any]]:
     """Run the multi-agent optimization loop."""
     recommender = RecommenderAgent()
@@ -27,10 +39,8 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
 
         # Get recommendations
         recommendations_str = recommender.recommend(X, y, previous_results)
-        try:
-            recommendations = json.loads(recommendations_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}, Raw response: {recommendations_str}")
+        recommendations = parse_llm_response(recommendations_str)
+        if recommendations is None:
             recommendations = []
 
         # Parse recommendations
@@ -77,31 +87,29 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
 
             # Evaluate and get suggestion
             eval_response = evaluator.evaluate_and_suggest(model_name, hyperparameters, previous_results)
-            try:
-                eval_result = json.loads(eval_response)
-                accuracy = eval_result.get("accuracy", 0.0)
-                accept = eval_result.get("accept", False)
-                reasoning = eval_result.get("reasoning", "No reasoning provided")
-                result = {
-                    "model": model_name,
-                    "hyperparameters": hyperparameters,
-                    "accuracy": accuracy,
-                    "accept": accept,
-                    "reasoning": reasoning
-                }
-                results.append(result)
-                iteration_results.append(
-                    f"Model: {model_name}, Hyperparameters: {hyperparameters}, Accuracy: {accuracy:.4f}, Accept: {accept}, Reasoning: {reasoning}"
-                )
-                logger.info(f"Result: Accuracy = {accuracy:.4f}, Accept: {accept}, Reasoning: {reasoning}")
-
-                # If accepted and meets threshold, stop
-                if accept and accuracy >= accuracy_threshold:
-                    logger.info(f"Accuracy threshold {accuracy_threshold} met. Stopping.")
-                    return results
-            except Exception as e:
-                logger.error(f"Error processing evaluator response: {e}, Response: {eval_response}")
+            eval_result = parse_llm_response(eval_response)
+            if eval_result is None:
                 continue
+            accuracy = eval_result.get("accuracy", 0.0)
+            accept = eval_result.get("accept", False)
+            reasoning = eval_result.get("reasoning", "No reasoning provided")
+            result = {
+                "model": model_name,
+                "hyperparameters": hyperparameters,
+                "accuracy": accuracy,
+                "accept": accept,
+                "reasoning": reasoning
+            }
+            results.append(result)
+            iteration_results.append(
+                f"Model: {model_name}, Hyperparameters: {hyperparameters}, Accuracy: {accuracy:.4f}, Accept: {accept}, Reasoning: {reasoning}"
+            )
+            logger.info(f"Result: Accuracy = {accuracy:.4f}, Accept: {accept}, Reasoning: {reasoning}")
+
+            # If accepted and meets threshold, stop
+            if accept and accuracy >= accuracy_threshold:
+                logger.info(f"Accuracy threshold {accuracy_threshold} met. Stopping.")
+                return results
 
         # Update previous results
         previous_results = "\n".join(iteration_results)

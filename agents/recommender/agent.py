@@ -40,7 +40,7 @@ class RecommenderAgent:
             "n_samples": X.shape[0],
             "n_features": X.shape[1],
             "n_classes": len(y.unique()),
-            "class_balance": y.value_counts(normalize=True).to_dict(),
+            "class balanace": y.value_counts(normalize=True).to_dict(),
         }
 
     def recommend(self, X: pd.DataFrame, y: pd.Series, previous_results: str = "") -> str:
@@ -58,15 +58,15 @@ Previous Results (if any):
 
 Supported Models: RandomForestClassifier, LogisticRegression, SVC
 
-Output a JSON array of objects, strictly following this format:
+Output only a valid JSON array of objects in the following format:
 [
   {{
-    "model": "[Model Name]",
-    "hyperparameters": "example: n_estimators=100, max_depth=5",
-    "reasoning": "[Reasoning text]"
+    "model": "Model Name",
+    "hyperparameters": "param1=value1, param2=value2",
+    "reasoning": "Your reasoning here"
   }}
 ]
-Do not include any text outside the JSON array.
+Ensure that your response is pure JSON without any additional text, code block markers, or explanations.
 """
         async def run_agent():
             self.session_service.create_session(app_name="recommender_app", user_id=self.user_id, session_id=self.session_id)

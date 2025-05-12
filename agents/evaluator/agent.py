@@ -56,10 +56,12 @@ class EvaluateModelTool(AgentTool):
 class EvaluatorAgent:
     def __init__(self, X: pd.DataFrame, y: pd.Series):
         self.tool = EvaluateModelTool(X, y)
+        llm_system_prompt = """You are an expert AutoML evaluator. When given a model name and hyperparameters, use the 'evaluate_model' tool to evaluate it on the dataset. Based on the accuracy, dataset characteristics, and previous results, suggest whether to accept this model or recommend new ones. Return a JSON object with 'accuracy' (float), 'accept' (boolean), and 'reasoning' (string)."""
+        
         self.agent = Agent(
             name="evaluator",
-            model="gemini-2.0-flash",
-            instruction="You are an expert AutoML evaluator. When given a model name and hyperparameters, use the 'evaluate_model' tool to evaluate it on the dataset. Based on the accuracy, dataset characteristics, and previous results, suggest whether to accept this model or recommend new ones. Return a JSON object with 'accuracy' (float), 'accept' (boolean), and 'reasoning' (string).",
+            model="gemini-2.0-flash-exp",
+            instruction=llm_system_prompt,
             tools=[self.tool]
         )
         self.session_service = InMemorySessionService()
@@ -71,11 +73,19 @@ class EvaluatorAgent:
         """Evaluate a model and suggest next steps using Gemini-2.0-flash."""
         hyperparams_str = ", ".join([f"{k}={v}" for k, v in hyperparameters.items()])
         user_input = f"""
+You are an expert AutoML evaluator. When given a model name and hyperparameters, use the 'evaluate_model' tool to evaluate it on the dataset. Based on the accuracy, dataset characteristics, and previous results, suggest whether to accept this model or recommend new ones.
+
 Evaluate {model_name} with hyperparameters {hyperparams_str} using the 'evaluate_model' tool.
 Previous Results:
 {previous_results}
-Based on the accuracy, dataset characteristics, and previous results, indicate whether to accept this model or recommend new ones.
-Return a JSON object with keys 'accuracy' (float), 'accept' (boolean), and 'reasoning' (string).
+
+Output only a valid JSON object with the following keys:
+{{
+  "accuracy": float,
+  "accept": boolean,
+  "reasoning": "Your reasoning here"
+}}
+Ensure that your response is pure JSON without any additional text, code block markers, or explanations.
 """
         async def run_agent():
             self.session_service.create_session(app_name="evaluator_app", user_id=self.user_id, session_id=self.session_id)
