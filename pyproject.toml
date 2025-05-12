@@ -11,19 +11,24 @@ python = "^3.9"
 scikit-learn = "^1.5.0"
 langchain = "0.2.16"
 langchain-huggingface = "0.0.3"
+langchain-core = "0.2.38"
 optuna = "^3.6.0"
 pandas = "^2.2.0"
 numpy = "^1.26.0"
-huggingface_hub = "^0.23.0"
+python-dotenv = "^1.0.0"
 pytest = "^8.2.0"
 mypy = "^1.10.0"
 sphinx = "^7.3.0"
-dotenv = "^0.9.9"
+transformers = "^4.44.0"
+torch = "^2.4.0"
 
 [tool.poetry.dev-dependencies]
 black = "^24.4.0"
 isort = "^5.13.0"
 flake8 = "^7.0.0"
+
+[tool.poetry.packages]
+include = "optimindtune"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
