@@ -94,19 +94,51 @@ The script will load the Iris dataset (by default) and initiate the Recommender 
 - The process will continue for a set number of iterations or until an accuracy threshold is met. Final results will be printed to the console.
 
 ## 💡 How It Works: The Optimization Loop
-Initialization: main.py loads the dataset (e.g., Iris) and initializes RecommenderAgent and EvaluatorAgent.
-Recommendation: The RecommenderAgent is called.
-It receives dataset metadata and any previous results.
-It queries Gemini to suggest 1-2 (model_name, hyperparameters_string, reasoning) sets.
-Parsing & Preparation: main.py parses the Recommender's JSON response.
-Evaluation: For each valid recommendation:
-The EvaluatorAgent is invoked with the model_name, parsed hyperparameters_dict, and previous_results.
-The EvaluatorAgent prompts Gemini, instructing it to use the EvaluateModelTool.
-The EvaluateModelTool performs 5-fold cross-validation on the scaled data.
-The accuracy is returned to the Gemini model within the EvaluatorAgent.
-Gemini then provides a JSON response: {"accuracy": ..., "accept": ..., "reasoning": ...}.
-Decision & Iteration:
-main.py logs the evaluation result.
-If a model is accepted and meets the accuracy_threshold, the optimization stops.
-Otherwise, the results from this iteration become previous_results for the next call to the RecommenderAgent.
-Termination: The loop stops if the accuracy_threshold is met or max_iterations are reached.
+1. **Initialization**: `main.py` loads the dataset (e.g., Iris) and initializes `RecommenderAgent` and `EvaluatorAgent`.
+2. **Recommendation**: The `RecommenderAgent` is called.
+- It receives dataset metadata and any previous results.
+- It queries Gemini to suggest 1-2 `(model_name, hyperparameters_string, reasoning) `sets.
+3. **Parsing & Preparation**: main.py parses the Recommender's JSON response.
+4. **Evaluation**: For each valid recommendation:
+- The `EvaluatorAgent` is invoked with the model_name, parsed hyperparameters_dict, and previous_results.
+- The `EvaluatorAgent` prompts Gemini, instructing it to use the EvaluateModelTool.
+- The `EvaluateModelTool` performs 5-fold cross-validation on the scaled data.
+- The accuracy is returned to the Gemini model within the EvaluatorAgent.
+- Gemini then provides a JSON response: {"accuracy": ..., "accept": ..., "reasoning": ...}.
+5. **Decision & Iteration**:
+- `main.py `logs the evaluation result.
+- If a model is `accepted` and meets the `accuracy_threshold`, the optimization stops.
+- Otherwise, the results from this iteration become `previous_results` for the next call to the `RecommenderAgent`.
+6. **Termination**: The loop stops if the `accuracy_threshold` is met or `max_iterations` are reached.
+
+## 🔮 Future Enhancements & Roadmap
+
+- [ ] **Support for More Models:** Expand beyond RandomForest, LogisticRegression, and SVC to include a wider array of scikit-learn classifiers (e.g., Gradient Boosting, XGBoost, LightGBM, Naive Bayes) and potentially models from other libraries.
+- [ ] **Regression & Other Task Types:** Adapt the agent logic and evaluation tools to support regression tasks, and eventually other machine learning tasks like clustering or anomaly detection.
+- [ ] **Advanced Evaluation Metrics:** Allow users to specify and optimize for different evaluation metrics beyond accuracy (e.g., F1-score (macro, micro, weighted), Precision, Recall, ROC AUC, LogLoss, Mean Squared Error for regression).
+- [ ] **More Sophisticated Dataset Analysis:** Enhance the Recommender agent's ability to understand dataset nuances by:
+    -   Performing more detailed automated exploratory data analysis (EDA).
+    -   Considering feature types (categorical, numerical), presence of missing values, and feature scaling needs more explicitly in its recommendations.
+    -   Potentially suggesting preprocessing steps.
+- [ ] **Interactive Mode/UI:** Develop a simple web interface (e.g., using Streamlit or Flask) to:
+    -   Allow users to upload their datasets.
+    -   Configure optimization parameters.
+    -   Monitor the optimization process in real-time.
+    -   Visualize results and agent interactions.
+- [ ] **Parallel Evaluation:** Implement the capability to evaluate multiple hyperparameter configurations recommended by the Recommender agent simultaneously, speeding up the optimization process.
+- [ ] **Budget Constraints:** Allow users to define constraints for the optimization process, such as:
+    -   Maximum runtime.
+    -   Maximum number of model evaluations.
+    -   Early stopping if no improvement is seen after a certain number of iterations.
+- [ ] **Error Handling & Robustness:**
+    -   Improve resilience to unexpected LLM outputs (e.g., malformed JSON, irrelevant suggestions).
+    -   Add more robust error handling within the model evaluation tool for issues like convergence failures or incompatible hyperparameter combinations.
+    -   Implement retry mechanisms for API calls.
+- [ ] **Customizable Prompts & Agent Behavior:**
+    -   Allow advanced users to tweak the system prompts for the Recommender and Evaluator agents to fine-tune their behavior.
+    -   Offer different "strategies" for the Recommender (e.g., prioritize exploration vs. exploitation).
+- [ ] **Result Persistence & Comparison:**
+    -   Save optimization results to a file or a simple database.
+    -   Allow users to load and compare results from different runs.
+- [ ] **Integration with Experiment Tracking Tools:** Add support for logging results to popular experiment tracking platforms like MLflow or Weights & Biases.
+- [ ] **Hyperparameter Space Definition:** Allow users to define or constrain the hyperparameter search space for each model type.
