@@ -96,19 +96,19 @@ The script will load the Iris dataset (by default) and initiate the Recommender 
 ## 💡 How It Works: The Optimization Loop
 1. **Initialization**: `main.py` loads the dataset (e.g., Iris) and initializes `RecommenderAgent` and `EvaluatorAgent`.
 2. **Recommendation**: The `RecommenderAgent` is called.
-- It receives dataset metadata and any previous results.
-- It queries Gemini to suggest 1-2 `(model_name, hyperparameters_string, reasoning) `sets.
+    - It receives dataset metadata and any previous results.
+    - It queries Gemini to suggest 1-2 `(model_name, hyperparameters_string, reasoning) `sets.
 3. **Parsing & Preparation**: main.py parses the Recommender's JSON response.
 4. **Evaluation**: For each valid recommendation:
-- The `EvaluatorAgent` is invoked with the model_name, parsed hyperparameters_dict, and previous_results.
-- The `EvaluatorAgent` prompts Gemini, instructing it to use the EvaluateModelTool.
-- The `EvaluateModelTool` performs 5-fold cross-validation on the scaled data.
-- The accuracy is returned to the Gemini model within the EvaluatorAgent.
-- Gemini then provides a JSON response: {"accuracy": ..., "accept": ..., "reasoning": ...}.
+    - The `EvaluatorAgent` is invoked with the model_name, parsed hyperparameters_dict, and previous_results.
+    - The `EvaluatorAgent` prompts Gemini, instructing it to use the EvaluateModelTool.
+    - The `EvaluateModelTool` performs 5-fold cross-validation on the scaled data.
+    - The accuracy is returned to the Gemini model within the EvaluatorAgent.
+    - Gemini then provides a JSON response: {"accuracy": ..., "accept": ..., "reasoning": ...}.
 5. **Decision & Iteration**:
-- `main.py `logs the evaluation result.
-- If a model is `accepted` and meets the `accuracy_threshold`, the optimization stops.
-- Otherwise, the results from this iteration become `previous_results` for the next call to the `RecommenderAgent`.
+    - `main.py `logs the evaluation result.
+    - If a model is `accepted` and meets the `accuracy_threshold`, the optimization stops.
+    - Otherwise, the results from this iteration become `previous_results` for the next call to the `RecommenderAgent`.
 6. **Termination**: The loop stops if the `accuracy_threshold` is met or `max_iterations` are reached.
 
 ## 🔮 Future Enhancements & Roadmap
