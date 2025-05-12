@@ -38,6 +38,16 @@ OptiMindTune employs two specialized AI agents built using the Google ADK (Agent
 
 ---
 
+
+## ✨ Watch it in Action! ✨
+
+[![Watch the Demo on YouTube](http://www.youtube.com/watch?v=zjOnTD5T43M)](http://www.youtube.com/watch?v=zjOnTD5T43M)
+
+**Curious to see how this amazing tool works?** Click the image above to watch a quick and engaging video demo on YouTube! You'll get a firsthand look at its key features and how it can supercharge your workflow.
+
+Don't miss out – see the magic happen! ✨
+
+
 ## 🛠️ Tech Stack
 
 * **Python 3.10+**
