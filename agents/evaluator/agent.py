@@ -74,21 +74,7 @@ class EvaluatorAgent:
         _tool_instance = EvaluateModelTool(agent=_agent_instance, X=X, y=y)
 
         # Step 3: Register the tool with the agent.
-        # This depends on the API of the ADK's Agent class.
-        # Common ways:
-        # Option A: If agent.tools is a settable property/attribute:
         _agent_instance.tools = [_tool_instance]
-        
-        # Option B: If the agent has an add_tool method (often preferred):
-        # if hasattr(_agent_instance, "add_tool"):
-        #     _agent_instance.add_tool(_tool_instance)
-        # elif hasattr(_agent_instance, "tools") and isinstance(getattr(_agent_instance, "tools", None), list):
-        #     # Fallback if tools is a list that can be appended to (less common for direct attribute)
-        #     # _agent_instance.tools.append(_tool_instance) # Requires tools to be initialized as a list
-        #     _agent_instance.tools = [_tool_instance] # If it's a settable list property
-        # else:
-        #     logger.warning("Could not find a standard way to add tool to agent after initialization. "
-        #                    "Tool might not be correctly registered.")
         
         # Assign to self
         self.agent = _agent_instance
