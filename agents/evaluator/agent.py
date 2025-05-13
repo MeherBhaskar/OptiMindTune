@@ -39,8 +39,6 @@ class EvaluateModelTool(AgentTool):
         if model_name not in self.model_map:
             raise ValueError(f"Unsupported model: {model_name}")
         model_class = self.model_map[model_name]
-        if model_name == "LogisticRegression" and hyperparameters.get("solver") == "saga" and hyperparameters.get("penalty") == "l1":
-            hyperparameters["max_iter"] = hyperparameters.get("max_iter", 1000)
         
         model = model_class(**hyperparameters)
         pipeline = Pipeline([
