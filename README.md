@@ -41,7 +41,7 @@ OptiMindTune employs two specialized AI agents built using the Google ADK (Agent
 
 ## ✨ Watch it in Action! ✨
 
-[![Demo](https://markdown-videos-api.jorgenkh.no/url?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DzjOnTD5T43M)](https://www.youtube.com/watch?v=zjOnTD5T43M)
+[![Demo](https://markdown-videos-api.jorgenkh.no/url?url=https%3A%2F%2Fyoutu.be%2F1LF6DrkTce4)](https://youtu.be/1LF6DrkTce4)
 
 ## 🛠️ Tech Stack
 
