@@ -1,19 +1,20 @@
 from typing import List, Dict, Any
 import pandas as pd
 from sklearn.datasets import load_iris
-from sklearn.preprocessing import StandardScaler # Added
-from sklearn.pipeline import Pipeline # Added
-from sklearn.ensemble import RandomForestClassifier # Added
-from sklearn.linear_model import LogisticRegression # Added
-from sklearn.svm import SVC # Added
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from agents.recommender.agent import RecommenderAgent
 from agents.evaluator.agent import EvaluatorAgent
 import json
 import logging
 from dotenv import load_dotenv
 import os
-import joblib # Added
-import time # Added
+import joblib
+import time
+import shutil # Added for copying files
 
 # Load environment variables
 load_dotenv()
@@ -58,16 +59,14 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
     for iteration in range(max_iterations):
         logger.info(f"Iteration {iteration + 1}/{max_iterations}")
 
-        # Get recommendations
         recommendations_str = recommender.recommend(X, y, previous_results)
         recommendations = parse_llm_response(recommendations_str)
         if recommendations is None:
             recommendations = []
 
-        # Parse recommendations
         parsed_recommendations = []
         for rec in recommendations:
-            if rec.get("model") not in recommender.model_map: # Checking against recommender's map for supported models
+            if rec.get("model") not in recommender.model_map:
                 logger.warning(f"Unsupported model recommended: {rec.get('model')}")
                 continue
             hyperparams_str = rec.get("hyperparameters", "")
@@ -87,7 +86,7 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
                             try:
                                 value = float(value)
                             except ValueError:
-                                pass # Keep as string if not int or float
+                                pass
                         hyperparams_dict[key] = value
             except Exception as e:
                 logger.error(f"Failed to parse hyperparameters: {e}, Hyperparameters: {hyperparams_str}")
@@ -97,16 +96,11 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
 
         if not parsed_recommendations:
             logger.info("No valid recommendations received in this iteration.")
-            # Continue to next iteration or break if needed, here we continue
-            # If you want to stop if no recommendations are ever made, add a counter or flag
-            if not results: # If no results yet and no new recommendations, then maybe stop
+            if not results:
                  logger.warning("No recommendations received and no prior results. Stopping.")
                  break
-            # If there are previous results, the recommender might learn, so continue
-            # previous_results remains the same for the next iteration if no new iteration_results are added
-
+        
         iteration_summary_for_recommender = []
-        best_iteration_accuracy = -1.0
         stop_due_to_threshold = False
 
         for rec_idx, rec in enumerate(parsed_recommendations):
@@ -128,33 +122,25 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
                 "iteration": iteration + 1,
                 "recommendation_index": rec_idx +1,
                 "model": model_name,
-                "hyperparameters": hyperparameters, # These are the original recommended hyperparams
+                "hyperparameters": hyperparameters,
                 "accuracy": accuracy,
                 "accept": accept,
                 "reasoning": reasoning,
-                "saved_model_path": None # Initialize with None
+                "saved_model_path": None
             }
 
             if accept:
                 logger.info(f"Model {model_name} with {hyperparameters} was accepted. Accuracy: {accuracy:.4f}.")
-                # Re-train and save the accepted model
                 try:
                     model_class = MODEL_CLASS_MAP.get(model_name)
                     if not model_class:
                         logger.error(f"Model class for {model_name} not found in MODEL_CLASS_MAP. Cannot save.")
                     else:
-                        # Apply specific hyperparameter adjustments if necessary (e.g., for LogisticRegression)
-                        # This ensures consistency with EvaluateModelTool's internal adjustments if any were critical for training
-                        # For now, we directly use the `hyperparameters` dict. If EvaluateModelTool makes critical internal changes
-                        # to hyperparams before fitting, those changes should ideally be returned or handled consistently.
-                        # The example EvaluateModelTool does modify 'max_iter' for LogisticRegression under specific conditions.
-                        # We should replicate that here for consistency IF these hyperparameters are used for saving.
-                        
-                        current_train_hyperparams = hyperparameters.copy() # Use a copy for training
+                        current_train_hyperparams = hyperparameters.copy()
                         if model_name == "LogisticRegression" and \
                            current_train_hyperparams.get("solver") == "saga" and \
                            current_train_hyperparams.get("penalty") == "l1":
-                            current_train_hyperparams["max_iter"] = current_train_hyperparams.get("max_iter", 1000) # Default from tool
+                            current_train_hyperparams["max_iter"] = current_train_hyperparams.get("max_iter", 1000)
 
                         model_instance = model_class(**current_train_hyperparams)
                         pipeline_to_save = Pipeline([
@@ -181,17 +167,16 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
             if accept and accuracy >= accuracy_threshold:
                 logger.info(f"Accuracy threshold {accuracy_threshold} met by an accepted model. Stopping optimization.")
                 stop_due_to_threshold = True
-                break # Stop evaluating other recommendations in this iteration
+                break 
         
-        previous_results = "\n".join(iteration_summary_for_recommender) # Update with all results from this iteration
+        previous_results = "\n".join(iteration_summary_for_recommender) 
 
         if stop_due_to_threshold:
-            break # Stop master iteration loop
+            break 
 
     if not stop_due_to_threshold:
-        logger.info("Max iterations reached or no more recommendations.")
+        logger.info("Max iterations reached or no more valid recommendations to process.")
     
-    # Save all results to a JSON file
     results_timestamp = time.strftime("%Y%m%d_%H%M%S")
     results_filename = f"optimization_results_{results_timestamp}.json"
     results_filepath = os.path.join(results_dir, results_filename)
@@ -205,24 +190,62 @@ def run_optimization(X: pd.DataFrame, y: pd.Series, max_iterations: int = 10, ac
     return results
 
 if __name__ == "__main__":
-    # Load Iris dataset
     iris = load_iris()
     X_df = pd.DataFrame(iris.data, columns=iris.feature_names)
     y_series = pd.Series(iris.target)
 
-    # Run optimization
-    final_results = run_optimization(X_df, y_series, max_iterations=5, accuracy_threshold=0.97) # Adjusted for testing
+    final_results = run_optimization(X_df, y_series, max_iterations=5, accuracy_threshold=0.97)
     
     logger.info("\nFinal Optimization Summary:")
     if final_results:
         for res in final_results:
             logger.info(
-                f"Model: {res['model']}, "
+                f"Iter {res['iteration']}-Rec{res['recommendation_index']}: Model: {res['model']}, "
                 f"Hyperparameters: {res['hyperparameters']}, "
                 f"Accuracy: {res['accuracy']:.4f}, "
                 f"Accept: {res['accept']}, "
-                # f"Reasoning: {res['reasoning']}, " # Reasoning can be long
                 f"Saved Model: {res['saved_model_path']}"
             )
     else:
         logger.info("No results from the optimization process.")
+
+    # Find and save the best model
+    best_model_info = None
+    highest_accuracy = -1.0
+
+    if final_results:
+        for result in final_results:
+            if result.get('accept') and result.get('accuracy', 0.0) > highest_accuracy:
+                if result.get('saved_model_path') and os.path.exists(result['saved_model_path']): # Ensure it was actually saved
+                    highest_accuracy = result['accuracy']
+                    best_model_info = result
+    
+    if best_model_info:
+        logger.info("\n--- Best Model Found ---")
+        logger.info(f"Model: {best_model_info['model']}")
+        logger.info(f"Hyperparameters: {best_model_info['hyperparameters']}")
+        logger.info(f"Accuracy: {best_model_info['accuracy']:.4f}")
+        logger.info(f"Original saved path: {best_model_info['saved_model_path']}")
+
+        best_model_dir = os.path.join("artifacts", "best_model")
+        os.makedirs(best_model_dir, exist_ok=True)
+
+        # Copy the best model artifact
+        destination_model_path = os.path.join(best_model_dir, "best_model.joblib")
+        try:
+            shutil.copy(best_model_info['saved_model_path'], destination_model_path)
+            logger.info(f"Best model copied to: {destination_model_path}")
+        except Exception as e:
+            logger.error(f"Error copying best model: {e}")
+
+        # Save best model metadata
+        best_model_details_path = os.path.join(best_model_dir, "best_model_details.json")
+        try:
+            with open(best_model_details_path, "w") as f:
+                json.dump(best_model_info, f, indent=4)
+            logger.info(f"Best model details saved to: {best_model_details_path}")
+        except Exception as e:
+            logger.error(f"Error saving best model details: {e}")
+            
+    else:
+        logger.info("\nNo accepted and saved model was found to be designated as the 'best model'.")
