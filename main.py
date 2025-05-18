@@ -53,20 +53,27 @@ def save_conversation(data, timestamp: str):
     json.dump(existing, open(log_file, 'w'), indent=2, cls=ConfigEncoder)
 
 def run_agent(runner, message, session_id: str):
-    """Run agent with proper session ID"""
-    try:
-        result = None
+    """Run agent with proper session ID and rate limiting"""
+    rate_limiter = RateLimitHandler(
+        calls_per_minute=10,
+        max_retries=3,
+        initial_delay=1.0
+    )
+    
+    def _run_with_session():
         for event in runner.run(
-            user_id="user123", 
-            session_id=session_id, 
+            user_id="user123",
+            session_id=session_id,
             new_message=message
         ):
             if event.is_final_response():
-                result = event
-                break
-        return result
+                return event
+        return None
+
+    try:
+        return rate_limiter.with_retries(_run_with_session)
     except Exception as e:
-        logger.error(f"Agent run failed: {e}")
+        logger.error(f"Agent run failed after retries: {e}")
         return None
 
 def get_recommendation_prompt(X, y, session):
