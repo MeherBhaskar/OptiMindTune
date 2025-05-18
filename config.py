@@ -5,9 +5,9 @@ from pathlib import Path
 @dataclass
 class OptiMindConfig:
     # Optimization parameters
-    max_iterations: int = 10
+    max_iterations: int = 5
     min_accuracy: float = 0.8
-    target_accuracy: float = 0.99
+    target_accuracy: float = 0.95
     exploration_ratio: float = 0.3
 
     # Session configuration

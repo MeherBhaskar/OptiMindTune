@@ -8,16 +8,16 @@
         {
           "model": "RandomForestClassifier",
           "hyperparameters": "n_estimators=100, max_depth=5, random_state=42",
-          "reasoning": "RandomForestClassifier is a robust ensemble method that often performs well on various datasets. Initial hyperparameters are set to reasonable defaults for a balanced dataset with a moderate number of features."
+          "reasoning": "Random Forest is a good initial model for classification, often providing a strong baseline. We'll use a reasonable number of trees and limit the depth to prevent overfitting given the dataset size."
         },
         {
           "model": "LogisticRegression",
           "hyperparameters": "solver=liblinear, multi_class=ovr, random_state=42",
-          "reasoning": "LogisticRegression is a linear model suitable for multi-class classification. 'liblinear' solver is chosen as it's suitable for small datasets. 'ovr' strategy is used for multi-class classification."
+          "reasoning": "Logistic Regression is a linear model that is simple and fast to train. It can perform well on datasets with a moderate number of features and samples, like the Iris dataset. 'liblinear' solver is suitable for small datasets, and 'ovr' handles multiclass classification."
         }
       ],
       "status": "success",
-      "timestamp": "2025-05-18T16:42:44.995141"
+      "timestamp": "2025-05-18T17:08:22.336388"
     },
     {
       "iteration": 0,
@@ -29,7 +29,7 @@
         "success": true
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:47.035005"
+      "timestamp": "2025-05-18T17:08:24.263591"
     },
     {
       "iteration": 0,
@@ -39,10 +39,10 @@
       "output": {
         "accuracy": 0.9667,
         "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
+        "reasoning": "The accuracy is high, and there are no previous results to compare against. Accepting the model."
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:47.837115"
+      "timestamp": "2025-05-18T17:08:25.187548"
     },
     {
       "iteration": 0,
@@ -54,7 +54,7 @@
         "success": true
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:49.009930"
+      "timestamp": "2025-05-18T17:08:26.727245"
     },
     {
       "iteration": 0,
@@ -64,29 +64,29 @@
       "output": {
         "accuracy": 0.9067,
         "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
+        "reasoning": "The accuracy is reasonably high and there are no previous results to compare against. Accepting the model."
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:49.871103"
+      "timestamp": "2025-05-18T17:08:27.684625"
     },
     {
       "iteration": 1,
       "agent": "recommender",
-      "input": "\nDataset Metadata:\nn_samples: 150\nn_features: 4\nn_classes: 3\nclass_balance: {0: 0.3333333333333333, 1: 0.3333333333333333, 2: 0.3333333333333333}\n\nPrevious Results (if any):\n[{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}]\n\nSupported Models: RandomForestClassifier, LogisticRegression, SVC\n\nRespond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2\", \"reasoning\": \"Your reasoning\"}]}\n",
+      "input": "\nDataset Metadata:\nn_samples: 150\nn_features: 4\nn_classes: 3\nclass_balance: {0: 0.3333333333333333, 1: 0.3333333333333333, 2: 0.3333333333333333}\n\nPrevious Results (if any):\n[{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high, and there are no previous results to compare against. Accepting the model.\"}]\n\nSupported Models: RandomForestClassifier, LogisticRegression, SVC\n\nRespond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2\", \"reasoning\": \"Your reasoning\"}]}\n",
       "output": [
         {
           "model": "RandomForestClassifier",
           "hyperparameters": "n_estimators=200, max_depth=7, random_state=42",
-          "reasoning": "Since the initial RandomForestClassifier performed well, we can try increasing the number of estimators and max_depth to potentially improve accuracy further and explore more complex relationships in the data."
+          "reasoning": "The previous RandomForestClassifier performed well. Increasing the number of estimators and max_depth might further improve performance, but we'll keep the random_state for reproducibility."
         },
         {
           "model": "SVC",
           "hyperparameters": "kernel=rbf, C=1.0, gamma=scale, random_state=42",
-          "reasoning": "SVC with an RBF kernel is a powerful classifier that can handle non-linear data. We'll start with a standard configuration using the 'scale' gamma and a C value of 1.0. SVC could potentially outperform the RandomForestClassifier."
+          "reasoning": "Since RandomForest performed well, it's worth exploring a non-linear model like SVC with the default RBF kernel to see if we can achieve better accuracy. Using 'gamma=scale' sets gamma to 1 / (n_features * X.var())."
         }
       ],
       "status": "success",
-      "timestamp": "2025-05-18T16:42:51.755968"
+      "timestamp": "2025-05-18T17:08:29.527165"
     },
     {
       "iteration": 1,
@@ -98,20 +98,20 @@
         "success": true
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:54.530857"
+      "timestamp": "2025-05-18T17:08:31.982654"
     },
     {
       "iteration": 1,
       "agent": "decision",
       "model": "RandomForestClassifier",
-      "input": "Decide whether to accept RandomForestClassifier with accuracy 0.9667.\nPrevious results: []",
+      "input": "Decide whether to accept RandomForestClassifier with accuracy 0.9667.\nPrevious results: [{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high, and there are no previous results to compare against. Accepting the model.\"}]",
       "output": {
         "accuracy": 0.9667,
         "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
+        "reasoning": "The model achieves the same accuracy as the previous run, indicating consistency. Accepting the model."
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:55.316493"
+      "timestamp": "2025-05-18T17:08:32.907475"
     },
     {
       "iteration": 1,
@@ -123,153 +123,28 @@
         "success": true
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:56.896721"
+      "timestamp": "2025-05-18T17:08:34.548497"
     },
     {
       "iteration": 1,
       "agent": "decision",
       "model": "SVC",
-      "input": "Decide whether to accept SVC with accuracy 0.9667.\nPrevious results: []",
+      "input": "Decide whether to accept SVC with accuracy 0.9667.\nPrevious results: [{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high, and there are no previous results to compare against. Accepting the model.\"}]",
       "output": {
         "accuracy": 0.9667,
         "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
+        "reasoning": "The accuracy is the same as the best previous result. Accepting the model."
       },
       "status": "success",
-      "timestamp": "2025-05-18T16:42:57.807417"
-    },
-    {
-      "iteration": 2,
-      "agent": "recommender",
-      "input": "\nDataset Metadata:\nn_samples: 150\nn_features: 4\nn_classes: 3\nclass_balance: {0: 0.3333333333333333, 1: 0.3333333333333333, 2: 0.3333333333333333}\n\nPrevious Results (if any):\n[{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}, {\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=200, max_depth=7, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}]\n\nSupported Models: RandomForestClassifier, LogisticRegression, SVC\n\nRespond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2\", \"reasoning\": \"Your reasoning\"}]}\n",
-      "output": [
-        {
-          "model": "SVC",
-          "hyperparameters": "kernel=rbf, C=1.0, gamma=scale, random_state=42",
-          "reasoning": "SVC with an RBF kernel is a powerful classifier that can handle non-linear data. We'll start with a standard configuration using the 'scale' gamma and a C value of 1.0 to see if it can achieve a better score than RandomForest."
-        },
-        {
-          "model": "RandomForestClassifier",
-          "hyperparameters": "n_estimators=100, max_depth=10, min_samples_leaf=2, random_state=42",
-          "reasoning": "The RandomForestClassifier has been performing well. Let's try increasing max_depth and adding a min_samples_leaf parameter to regularize and see if it improves the performance or generalizability of the model."
-        }
-      ],
-      "status": "success",
-      "timestamp": "2025-05-18T16:42:59.510110"
-    },
-    {
-      "iteration": 2,
-      "agent": "evaluator",
-      "model": "SVC",
-      "input": "Evaluate SVC with kernel=rbf, C=1.0, gamma=scale, random_state=42",
-      "output": {
-        "accuracy": 0.9666666666666666,
-        "success": true
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:00.874855"
-    },
-    {
-      "iteration": 2,
-      "agent": "decision",
-      "model": "SVC",
-      "input": "Decide whether to accept SVC with accuracy 0.9667.\nPrevious results: []",
-      "output": {
-        "accuracy": 0.9667,
-        "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:01.606091"
-    },
-    {
-      "iteration": 2,
-      "agent": "evaluator",
-      "model": "RandomForestClassifier",
-      "input": "Evaluate RandomForestClassifier with n_estimators=100, max_depth=10, min_samples_leaf=2, random_state=42",
-      "output": {
-        "accuracy": 0.9666666666666668,
-        "success": true
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:03.954488"
-    },
-    {
-      "iteration": 2,
-      "agent": "decision",
-      "model": "RandomForestClassifier",
-      "input": "Decide whether to accept RandomForestClassifier with accuracy 0.9667.\nPrevious results: []",
-      "output": {
-        "accuracy": 0.9667,
-        "accept": true,
-        "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:04.777086"
-    },
-    {
-      "iteration": 3,
-      "agent": "recommender",
-      "input": "\nDataset Metadata:\nn_samples: 150\nn_features: 4\nn_classes: 3\nclass_balance: {0: 0.3333333333333333, 1: 0.3333333333333333, 2: 0.3333333333333333}\n\nPrevious Results (if any):\n[{\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=100, max_depth=5, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}, {\"model\": \"RandomForestClassifier\", \"hyperparameters\": \"n_estimators=200, max_depth=7, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}, {\"model\": \"SVC\", \"hyperparameters\": \"kernel=rbf, C=1.0, gamma=scale, random_state=42\", \"accuracy\": 0.9667, \"accept\": true, \"reasoning\": \"The accuracy is high and there are no previous results to compare against, so accept the model.\"}]\n\nSupported Models: RandomForestClassifier, LogisticRegression, SVC\n\nRespond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2\", \"reasoning\": \"Your reasoning\"}]}\n",
-      "output": [
-        {
-          "model": "LogisticRegression",
-          "hyperparameters": "solver=liblinear, multi_class=ovr, C=0.5, random_state=42",
-          "reasoning": "Since RandomForestClassifier and SVC have both achieved good results, let's explore LogisticRegression. We will use 'liblinear' solver and 'ovr' multi_class strategy, and a lower C value to potentially improve generalization."
-        },
-        {
-          "model": "SVC",
-          "hyperparameters": "kernel=poly, degree=3, C=0.5, random_state=42",
-          "reasoning": "All previous models had similar performance. Trying SVC with a polynomial kernel might provide a different perspective. A lower C value is used for regularization."
-        }
-      ],
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:06.404295"
-    },
-    {
-      "iteration": 3,
-      "agent": "evaluator",
-      "model": "LogisticRegression",
-      "input": "Evaluate LogisticRegression with solver=liblinear, multi_class=ovr, C=0.5, random_state=42",
-      "output": {
-        "accuracy": 0.8800000000000001,
-        "success": true
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:07.859311"
-    },
-    {
-      "iteration": 3,
-      "agent": "decision",
-      "model": "LogisticRegression",
-      "input": "Decide whether to accept LogisticRegression with accuracy 0.8800.\nPrevious results: []",
-      "output": {
-        "accuracy": 0.88,
-        "accept": true,
-        "reasoning": "The accuracy is reasonably high and there are no previous results to compare against, so accept the model."
-      },
-      "status": "success",
-      "timestamp": "2025-05-18T16:43:08.857635"
-    },
-    {
-      "iteration": 3,
-      "agent": "evaluator",
-      "model": "SVC",
-      "input": "Evaluate SVC with kernel=poly, degree=3, C=0.5, random_state=42",
-      "output": {
-        "accuracy": 0.0,
-        "success": false
-      },
-      "status": "failed",
-      "timestamp": "2025-05-18T16:43:09.057068"
+      "timestamp": "2025-05-18T17:08:35.402211"
     }
   ],
-  "last_updated": "2025-05-18T16:43:09.057074",
+  "last_updated": "2025-05-18T17:08:35.402218",
   "metadata": {
     "config": {
-      "max_iterations": 10,
+      "max_iterations": 3,
       "min_accuracy": 0.8,
-      "target_accuracy": 0.95,
+      "target_accuracy": 0.92,
       "exploration_ratio": 0.3,
       "app_name": "opti_mind_tune",
       "user_id": "bhaskar_new",
@@ -289,15 +164,15 @@
       "rate_limit_delay": 1.0,
       "max_retries": 3
     },
-    "total_iterations": 4,
+    "total_iterations": 2,
     "best_model": {
       "model": "RandomForestClassifier",
       "hyperparameters": "n_estimators=100, max_depth=5, random_state=42",
       "accuracy": 0.9667,
       "accept": true,
-      "reasoning": "The accuracy is high and there are no previous results to compare against, so accept the model."
+      "reasoning": "The accuracy is high, and there are no previous results to compare against. Accepting the model."
     },
     "best_accuracy": 0.9667,
-    "completed_at": "2025-05-18T16:43:09.057668"
+    "completed_at": "2025-05-18T17:08:35.402804"
   }
 }
