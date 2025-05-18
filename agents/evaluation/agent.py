@@ -84,11 +84,11 @@ class EvaluateModelTool:
             return {"accuracy": 0.0, "error": str(e)}
 
 class EvaluationAgent(Agent):
-    def __init__(self, X: pd.DataFrame, y: pd.Series):
+    def __init__(self, X: pd.DataFrame, y: pd.Series, model="gemini-2.0-flash"):
         self._evaluate_tool = EvaluateModelTool(X, y)
         super().__init__(
             name="evaluation",
-            model="gemini-2.0-flash",
+            model=model,
             instruction="""You are an evaluation agent. Run the evaluate_model tool and return its results EXACTLY as received.
             Do not modify the accuracy value. Return in format: {"accuracy": <value>}""",
             tools=[self._evaluate_tool],

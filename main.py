@@ -15,7 +15,7 @@ from agents.recommender import RecommenderAgent
 from agents.evaluation import EvaluationAgent
 from agents.decision import DecisionAgent
 from sklearn.datasets import load_iris
-from config import OptimizationConfig, OptimizationComplete
+from config import OptiMindConfig, OptimizationComplete
 from typing import List, Dict, Any
 from utils.rate_limiter import RateLimitHandler
 
@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 OUTPUT_DIR = Path("output")
 LOGS_DIR = OUTPUT_DIR / "conversations"
 
+class ConfigEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Path):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
+
 def setup_directories():
     """Create necessary directories for output"""
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -44,7 +50,7 @@ def save_conversation(data, timestamp: str):
     existing = {"interactions": []} if not log_file.exists() else json.load(open(log_file))
     existing["interactions"].append({**data, "timestamp": datetime.now().isoformat()})
     existing["last_updated"] = datetime.now().isoformat()
-    json.dump(existing, open(log_file, 'w'), indent=2)
+    json.dump(existing, open(log_file, 'w'), indent=2, cls=ConfigEncoder)
 
 def run_agent(runner, message, session_id: str):
     """Run agent with proper session ID"""
@@ -133,47 +139,35 @@ Previous results: {json.dumps(previous_results)}"""
 
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    config = OptimizationConfig(
-        max_iterations=5,  # Adjust default values here
-        min_accuracy=0.85,
-        target_accuracy=0.95,
-        exploration_ratio=0.3
-    )
+    config = OptiMindConfig()
+
+    # Set up directories from config
+    config.logs_dir.mkdir(parents=True, exist_ok=True)
 
     # Load dataset (replace with your dataset)
     data = load_iris()
     X = pd.DataFrame(data.data, columns=data.feature_names)
     y = pd.Series(data.target)
 
-    # Set up session service and create unique session IDs
+    # Initialize session service with config parameters
     session_service = InMemorySessionService()
-    app_name = "opti_mind_tune"
-    user_id = "user123"
-    
-    # Create sessions with explicit IDs
-    session_ids = {
-        "recommender": "rec_session",
-        "evaluator": "eval_session",
-        "decision": "dec_session"
-    }
-    
     sessions = {
         name: session_service.create_session(
-            app_name=app_name,
-            user_id=user_id,
+            app_name=config.app_name,
+            user_id=config.user_id,
             session_id=session_id
         )
-        for name, session_id in session_ids.items()
+        for name, session_id in config.session_ids.items()
     }
 
-    # Initialize agents and runners
-    recommender = RecommenderAgent()
-    evaluator = EvaluationAgent(X, y)
-    decision = DecisionAgent()
-    
+    # Initialize agents with config
+    recommender = RecommenderAgent(model=config.model_name)
+    evaluator = EvaluationAgent(X, y, model=config.model_name)
+    decision = DecisionAgent(model=config.model_name)
+
     runners = {
         name: Runner(
-            app_name=app_name,
+            app_name=config.app_name,
             agent=agent,
             session_service=session_service
         )
@@ -200,7 +194,7 @@ def main():
             event = run_agent(
                 runners["recommender"], 
                 message, 
-                session_ids["recommender"]
+                config.session_ids["recommender"]
             )
             recommendations = parse_recommendations(event)
 
@@ -229,7 +223,7 @@ def main():
                     rec, 
                     iteration,
                     timestamp,
-                    session_ids["evaluator"]
+                    config.session_ids["evaluator"]
                 )
 
                 if eval_result.get("accuracy", 0) == 0:
@@ -248,7 +242,7 @@ Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history
                     sessions["decision"].state.get("evaluation_history", []),
                     iteration,
                     timestamp,
-                    session_ids["decision"]
+                    config.session_ids["decision"]
                 )
                 
                 # Update state in correct session
@@ -312,23 +306,24 @@ Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history
     except OptimizationComplete:
         logger.info("Optimization completed successfully")
     finally:
-        # Update final metadata
+        # Update final metadata with JSON-serializable config
         final_metadata = {
-            "config": vars(config),
+            "config": {k: str(v) if isinstance(v, Path) else v 
+                      for k, v in vars(config).items()},
             "total_iterations": iteration + 1,
             "best_model": best_model,
             "best_accuracy": best_accuracy,
             "completed_at": datetime.now().isoformat()
         }
         
-        # Save final metadata
+        # Save final metadata with custom encoder
         log_file = LOGS_DIR / f"conversation_{timestamp}.json"
         if log_file.exists():
             with open(log_file, "r") as f:
                 conversation_data = json.load(f)
             conversation_data["metadata"] = final_metadata
             with open(log_file, "w") as f:
-                json.dump(conversation_data, f, indent=2)
+                json.dump(conversation_data, f, indent=2, cls=ConfigEncoder)
 
         logger.info(f"Optimization completed after {iteration + 1} iterations")
         logger.info(f"Best model found: {best_model}")
