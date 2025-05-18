@@ -1,8 +1,9 @@
-import asyncio
 import json
 import logging
 import pandas as pd
 import os
+import re
+import time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -38,82 +39,32 @@ def setup_directories():
     """Create necessary directories for output"""
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-async def save_conversation_increment(conversation_data: Dict[str, Any], timestamp: str):
-    """Save agent conversation incrementally"""
+def save_conversation(data, timestamp: str):
     log_file = LOGS_DIR / f"conversation_{timestamp}.json"
-    
-    # Load existing conversations if file exists
-    existing_data = {"interactions": []}
-    if log_file.exists():
-        with open(log_file, "r") as f:
-            existing_data = json.load(f)
-    
-    # Append new conversation
-    existing_data["interactions"].append(conversation_data)
-    existing_data["last_updated"] = datetime.now().isoformat()
-    
-    # Save updated conversations
-    with open(log_file, "w") as f:
-        json.dump(existing_data, f, indent=2)
+    existing = {"interactions": []} if not log_file.exists() else json.load(open(log_file))
+    existing["interactions"].append({**data, "timestamp": datetime.now().isoformat()})
+    existing["last_updated"] = datetime.now().isoformat()
+    json.dump(existing, open(log_file, 'w'), indent=2)
 
-async def main():
-    # Setup output directory
-    setup_directories()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Initialize configuration
-    config = OptimizationConfig(
-        max_iterations=5,  # Adjust default values here
-        min_accuracy=0.85,
-        target_accuracy=0.95,
-        exploration_ratio=0.3
-    )
-
-    # Initialize conversation history
-    conversation_history = []
-
-    # Load dataset (replace with your dataset)
-    data = load_iris()
-    X = pd.DataFrame(data.data, columns=data.feature_names)
-    y = pd.Series(data.target)
-
-    # Set up session
-    session_service = InMemorySessionService()
-    session_id = "session123"
-    user_id = "user123"
-    session = session_service.create_session(app_name="opti_mind_tune", user_id=user_id, session_id=session_id)
-
-    # Initialize agents
-    recommender_agent = RecommenderAgent()
-    evaluation_agent = EvaluationAgent(X, y)
-    decision_agent = DecisionAgent()
-
-    # Initialize runners
-    recommender_runner = Runner(agent=recommender_agent, app_name="opti_mind_tune", session_service=session_service)
-    evaluation_runner = Runner(agent=evaluation_agent, app_name="opti_mind_tune", session_service=session_service)
-    decision_runner = Runner(agent=decision_agent, app_name="opti_mind_tune", session_service=session_service)
-
-    # Add rate limiting to API calls
-    rate_limit_handler = RateLimitHandler(base_delay=2.0, max_retries=3)
-
-    @rate_limit_handler
-    async def run_agent(runner, user_id: str, session_id: str, message: types.Content):
-        async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=message):
+def run_agent(runner, message, session_id: str):
+    """Run agent with proper session ID"""
+    try:
+        result = None
+        for event in runner.run(
+            user_id="user123", 
+            session_id=session_id, 
+            new_message=message
+        ):
             if event.is_final_response():
-                return event
+                result = event
+                break
+        return result
+    except Exception as e:
+        logger.error(f"Agent run failed: {e}")
         return None
 
-    max_iterations = 2
-    best_model = None
-    best_accuracy = 0.0
-
-    try:
-        for iteration in range(config.max_iterations):
-            logger.info(f"Starting iteration {iteration + 1}/{config.max_iterations}")
-
-            # Run recommender
-            previous_results = session.state.get("evaluation_history", [])
-            user_input = f"""
+def get_recommendation_prompt(X, y, session):
+    return f"""
 Dataset Metadata:
 n_samples: {X.shape[0]}
 n_features: {X.shape[1]}
@@ -121,32 +72,144 @@ n_classes: {len(y.unique())}
 class_balance: {y.value_counts(normalize=True).to_dict()}
 
 Previous Results (if any):
-{json.dumps(previous_results)}
+{json.dumps(session.state.get("evaluation_history", []))}
 
 Supported Models: RandomForestClassifier, LogisticRegression, SVC
 
 Respond with a JSON object: {{"recommendations": [{{"model": "ModelName", "hyperparameters": "param1=value1, param2=value2", "reasoning": "Your reasoning"}}]}}
 """
+
+def parse_recommendations(event):
+    if not event:
+        return []
+    try:
+        return json.loads(event.content.parts[0].text).get('recommendations', [])
+    except:
+        return []
+
+def evaluate_model(runner, rec, iteration, timestamp, session_id):
+    eval_input = f"Evaluate {rec['model']} with {rec['hyperparameters']}"
+    eval_message = types.Content(role="user", parts=[types.Part(text=eval_input)])
+    eval_event = run_agent(runner, eval_message, session_id)
+    result = {"accuracy": 0.0, "success": False}
+    if eval_event:
+        try:
+            result = json.loads(eval_event.content.parts[0].text)
+            result["success"] = True
+            logger.info(f"Model {rec['model']} evaluation: {result}")
+        except Exception as e:
+            logger.error(f"Evaluation failed: {e}")
+    save_conversation({
+        "iteration": iteration,
+        "agent": "evaluator",
+        "model": rec["model"],
+        "input": eval_input,
+        "output": result,
+        "status": "success" if result.get("accuracy", 0) > 0 else "failed"
+    }, timestamp)
+    return result
+
+def make_decision(runner, rec, eval_result, previous_results, iteration, timestamp, session_id):
+    decision_input = f"""Decide whether to accept {rec['model']} with accuracy {eval_result['accuracy']:.4f}.
+Previous results: {json.dumps(previous_results)}"""
+    decision_message = types.Content(role="user", parts=[types.Part(text=decision_input)])
+    decision_event = run_agent(runner, decision_message, session_id)
+    if not decision_event:
+        return None
+    try:
+        decision = json.loads(decision_event.content.parts[0].text)
+        save_conversation({
+            "iteration": iteration,
+            "agent": "decision",
+            "model": rec["model"],
+            "input": decision_input,
+            "output": decision,
+            "status": "success"
+        }, timestamp)
+        return decision
+    except Exception as e:
+        logger.error(f"Decision failed: {e}")
+        return None
+
+def main():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    config = OptimizationConfig(
+        max_iterations=5,  # Adjust default values here
+        min_accuracy=0.85,
+        target_accuracy=0.95,
+        exploration_ratio=0.3
+    )
+
+    # Load dataset (replace with your dataset)
+    data = load_iris()
+    X = pd.DataFrame(data.data, columns=data.feature_names)
+    y = pd.Series(data.target)
+
+    # Set up session service and create unique session IDs
+    session_service = InMemorySessionService()
+    app_name = "opti_mind_tune"
+    user_id = "user123"
+    
+    # Create sessions with explicit IDs
+    session_ids = {
+        "recommender": "rec_session",
+        "evaluator": "eval_session",
+        "decision": "dec_session"
+    }
+    
+    sessions = {
+        name: session_service.create_session(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id
+        )
+        for name, session_id in session_ids.items()
+    }
+
+    # Initialize agents and runners
+    recommender = RecommenderAgent()
+    evaluator = EvaluationAgent(X, y)
+    decision = DecisionAgent()
+    
+    runners = {
+        name: Runner(
+            app_name=app_name,
+            agent=agent,
+            session_service=session_service
+        )
+        for name, agent in [
+            ("recommender", recommender),
+            ("evaluator", evaluator),
+            ("decision", decision)
+        ]
+    }
+
+    best_model = None
+    best_accuracy = 0.0
+
+    try:
+        for iteration in range(config.max_iterations):
+            logger.info(f"Starting iteration {iteration + 1}/{config.max_iterations}")
+
+            # Use the recommender session for previous_results and prompt
+            previous_results = sessions["recommender"].state.get("evaluation_history", [])
+            user_input = get_recommendation_prompt(X, y, sessions["recommender"])
             message = types.Content(role="user", parts=[types.Part(text=user_input)])
             
-            # Run recommender with rate limiting
-            event = await run_agent(recommender_runner, user_id, session_id, message)
-            if event:
-                try:
-                    response_json = json.loads(event.content.parts[0].text)
-                    recommendations = response_json.get('recommendations', [])
-                    logger.info(f"Received recommendations: {recommendations}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse recommendations: {e}")
-                    continue
+            # Run recommender with explicit session ID
+            event = run_agent(
+                runners["recommender"], 
+                message, 
+                session_ids["recommender"]
+            )
+            recommendations = parse_recommendations(event)
 
             if not recommendations:
                 logger.error("No valid recommendations received")
                 continue
 
             # Log recommender conversation immediately
-            await save_conversation_increment({
-                "timestamp": datetime.now().isoformat(),
+            save_conversation({
                 "iteration": iteration + 1,
                 "agent": "recommender",
                 "input": user_input,
@@ -160,89 +223,81 @@ Respond with a JSON object: {{"recommendations": [{{"model": "ModelName", "hyper
                 reasoning = rec.get('reasoning')
                 logger.info(f"Evaluating {model_name} with {hyperparameters} (Reason: {reasoning})")
 
-                # Run evaluation
-                eval_input = f"Evaluate {model_name} with {hyperparameters} using evaluate_model tool. Return JSON: {{'accuracy': float}}"
-                eval_message = types.Content(role="user", parts=[types.Part(text=eval_input)])
+                # Run evaluation with explicit session ID
+                eval_result = evaluate_model(
+                    runners["evaluator"], 
+                    rec, 
+                    iteration,
+                    timestamp,
+                    session_ids["evaluator"]
+                )
+
+                if eval_result.get("accuracy", 0) == 0:
+                    logger.warning(f"Skipping decision for failed evaluation of {model_name}")
+                    continue
+
+                # Prepare decision input string here so it can be logged later
+                decision_input = f"""Decide whether to accept {rec['model']} with accuracy {eval_result['accuracy']:.4f}.
+Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history", []))}"""
+
+                # Run decision with explicit session ID
+                decision = make_decision(
+                    runners["decision"],
+                    rec,
+                    eval_result,
+                    sessions["decision"].state.get("evaluation_history", []),
+                    iteration,
+                    timestamp,
+                    session_ids["decision"]
+                )
                 
-                # Run evaluation with rate limiting
-                eval_event = await run_agent(evaluation_runner, user_id, session_id, eval_message)
-                eval_accuracy = 0.0
-                eval_response = {"accuracy": 0.0, "success": False, "error": "No response"}
+                # Update state in correct session
+                if decision and decision.get("accept"):
+                    if "evaluation_history" not in sessions["decision"].state:
+                        sessions["decision"].state["evaluation_history"] = []
+                        
+                    current_result = {
+                        "model": rec["model"],
+                        "hyperparameters": rec["hyperparameters"],
+                        "accuracy": decision["accuracy"],
+                        "accept": decision["accept"],
+                        "reasoning": decision["reasoning"]
+                    }
+                    sessions["decision"].state["evaluation_history"].append(current_result)
 
-                if eval_event:
-                    try:
-                        eval_response = json.loads(eval_event.content.parts[0].text)
-                        if eval_response.get("success", False):
-                            eval_accuracy = float(eval_response.get("accuracy", 0.0))
-                            logger.info(f"Evaluation success - Accuracy: {eval_accuracy:.4f}")
-                        else:
-                            error_msg = eval_response.get("error", "Unknown error")
-                            logger.error(f"Evaluation failed: {error_msg}")
-                    except (json.JSONDecodeError, KeyError, ValueError) as e:
-                        logger.error(f"Failed to parse evaluation response: {e}")
-                        eval_response = {
-                            "accuracy": 0.0,
-                            "success": False,
-                            "error": str(e)
-                        }
-
-                # Log evaluation conversation
-                await save_conversation_increment({
-                    "timestamp": datetime.now().isoformat(),
-                    "iteration": iteration + 1,
-                    "agent": "evaluator",
+                # Store in session state (use recommender session for global history)
+                if "evaluation_history" not in sessions["recommender"].state:
+                    sessions["recommender"].state["evaluation_history"] = []
+                
+                # Add to evaluation history
+                current_result = {
                     "model": model_name,
-                    "input": eval_input,
-                    "output": eval_response,
-                    "status": "success" if eval_accuracy > 0 else "failed"
+                    "hyperparameters": hyperparameters,
+                    "accuracy": decision["accuracy"],
+                    "accept": decision["accept"],
+                    "reasoning": decision["reasoning"]
+                }
+                sessions["recommender"].state["evaluation_history"].append(current_result)
+                
+                # Log decision conversation immediately
+                save_conversation({
+                    "iteration": iteration + 1,
+                    "agent": "decision",
+                    "model": model_name,
+                    "input": decision_input,
+                    "output": decision,
+                    "status": "success"
                 }, timestamp)
-                
-                # Run decision
-                decision_input = f"Decide whether to accept {model_name} with accuracy {eval_accuracy}. Previous results: {json.dumps(previous_results)}"
-                decision_message = types.Content(role="user", parts=[types.Part(text=decision_input)])
-                
-                # Run decision with rate limiting
-                decision_event = await run_agent(decision_runner, user_id, session_id, decision_message)
-                if decision_event:
-                    try:
-                        decision = json.loads(decision_event.content.parts[0].text)
-                        # Store in session state
-                        if "evaluation_history" not in session.state:
-                            session.state["evaluation_history"] = []
-                        
-                        # Add to evaluation history
-                        current_result = {
-                            "model": model_name,
-                            "hyperparameters": hyperparameters,
-                            "accuracy": decision["accuracy"],
-                            "accept": decision["accept"],
-                            "reasoning": decision["reasoning"]
-                        }
-                        session.state["evaluation_history"].append(current_result)
-                        
-                        # Log decision conversation immediately
-                        await save_conversation_increment({
-                            "timestamp": datetime.now().isoformat(),
-                            "iteration": iteration + 1,
-                            "agent": "decision",
-                            "model": model_name,
-                            "input": decision_input,
-                            "output": decision,
-                            "status": "success"
-                        }, timestamp)
 
-                        logger.info(f"Result: Accuracy={decision['accuracy']:.4f}, Accept={decision['accept']}, Reasoning={decision['reasoning']}")
-                        
-                        # Update best model if better accuracy found
-                        if decision["accuracy"] > best_accuracy:
-                            best_accuracy = decision["accuracy"]
-                            best_model = current_result.copy()
-                            
-                        # Only break from decision loop, not entire iteration
-                        break
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Failed to parse decision response: {e}")
-                    break
+                logger.info(f"Result: Accuracy={decision['accuracy']:.4f}, Accept={decision['accept']}, Reasoning={decision['reasoning']}")
+                
+                # Update best model if better accuracy found
+                if decision["accuracy"] > best_accuracy:
+                    best_accuracy = decision["accuracy"]
+                    best_model = current_result.copy()
+                    
+                # Only break from decision loop, not entire iteration
+                break
 
             # Check optimization criteria
             if best_model:
@@ -279,4 +334,8 @@ Respond with a JSON object: {{"recommendations": [{{"model": "ModelName", "hyper
         logger.info(f"Best model found: {best_model}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        raise

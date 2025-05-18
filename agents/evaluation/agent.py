@@ -57,13 +57,12 @@ class EvaluateModelTool:
             logger.error(f"Failed to parse hyperparameters: {hyperparameters} - {str(e)}")
             raise ValueError(f"Invalid hyperparameter format: {str(e)}")
 
-    def __call__(self, model_name: str, hyperparameters: str) -> Dict[str, float]:
+    def __call__(self, model_name: str, hyperparameters: str) -> Dict[str, Any]:
         """Evaluate model and return results as dictionary"""
         try:
             if model_name not in self.model_map:
                 raise ValueError(f"Unsupported model: {model_name}")
             
-            # Parse and create model
             hyperparams = self.parse_hyperparameters(hyperparameters)
             model = self.model_map[model_name](**hyperparams)
             pipeline = Pipeline([
@@ -71,19 +70,18 @@ class EvaluateModelTool:
                 ("classifier", model)
             ])
             
-            # Evaluate
             scores = cross_val_score(pipeline, self.X, self.y, cv=5, scoring="accuracy")
             mean_accuracy = float(scores.mean())
             
-            # Fit and store pipeline
             pipeline.fit(self.X, self.y)
             self.current_pipeline = pipeline
             
+            logger.info(f"Model {model_name} achieved accuracy: {mean_accuracy:.4f}")
             return {"accuracy": mean_accuracy}
             
         except Exception as e:
             logger.error(f"Evaluation failed: {str(e)}")
-            return {"accuracy": 0.0}
+            return {"accuracy": 0.0, "error": str(e)}
 
 class EvaluationAgent(Agent):
     def __init__(self, X: pd.DataFrame, y: pd.Series):
@@ -91,10 +89,8 @@ class EvaluationAgent(Agent):
         super().__init__(
             name="evaluation",
             model="gemini-2.0-flash",
-            instruction="""You are an evaluation agent. Given a model name and hyperparameters, evaluate the model using the evaluate_model tool.
-            The tool will return a dictionary with an accuracy value.
-            Return the EXACT same accuracy value in the following format:
-            {"accuracy": <accuracy_value>}""",
+            instruction="""You are an evaluation agent. Run the evaluate_model tool and return its results EXACTLY as received.
+            Do not modify the accuracy value. Return in format: {"accuracy": <value>}""",
             tools=[self._evaluate_tool],
             disallow_transfer_to_parent=True,
             disallow_transfer_to_peers=True
