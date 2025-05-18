@@ -166,30 +166,39 @@ Respond with a JSON object: {{"recommendations": [{{"model": "ModelName", "hyper
                 
                 # Run evaluation with rate limiting
                 eval_event = await run_agent(evaluation_runner, user_id, session_id, eval_message)
+                eval_accuracy = 0.0
+                eval_response = {"accuracy": 0.0, "success": False, "error": "No response"}
+
                 if eval_event:
                     try:
                         eval_response = json.loads(eval_event.content.parts[0].text)
-                        accuracy = eval_response["accuracy"]
-                        # Get the trained pipeline from the agent
-                        model_object = evaluation_agent.get_current_pipeline()
-                    except (json.JSONDecodeError, KeyError) as e:
+                        if eval_response.get("success", False):
+                            eval_accuracy = float(eval_response.get("accuracy", 0.0))
+                            logger.info(f"Evaluation success - Accuracy: {eval_accuracy:.4f}")
+                        else:
+                            error_msg = eval_response.get("error", "Unknown error")
+                            logger.error(f"Evaluation failed: {error_msg}")
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
                         logger.error(f"Failed to parse evaluation response: {e}")
-                        accuracy = 0.0
-                        model_object = None
+                        eval_response = {
+                            "accuracy": 0.0,
+                            "success": False,
+                            "error": str(e)
+                        }
 
-                # Log evaluation conversation immediately
+                # Log evaluation conversation
                 await save_conversation_increment({
                     "timestamp": datetime.now().isoformat(),
                     "iteration": iteration + 1,
                     "agent": "evaluator",
                     "model": model_name,
                     "input": eval_input,
-                    "output": {"accuracy": accuracy},
-                    "status": "success" if accuracy > 0 else "failed"
+                    "output": eval_response,
+                    "status": "success" if eval_accuracy > 0 else "failed"
                 }, timestamp)
                 
                 # Run decision
-                decision_input = f"Decide whether to accept {model_name} with accuracy {accuracy}. Previous results: {json.dumps(previous_results)}"
+                decision_input = f"Decide whether to accept {model_name} with accuracy {eval_accuracy}. Previous results: {json.dumps(previous_results)}"
                 decision_message = types.Content(role="user", parts=[types.Part(text=decision_input)])
                 
                 # Run decision with rate limiting

@@ -9,6 +9,8 @@ from sklearn.svm import SVC
 import logging
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, PrivateAttr
+from ..base_agent import BaseLoggingAgent
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,45 +32,57 @@ class EvaluateModelTool:
         """Return the currently fitted pipeline"""
         return self.current_pipeline
 
-    def __call__(self, model_name: str, hyperparameters: str) -> Dict[str, float]:
-        """Implementation of the evaluation logic"""
-        if model_name not in self.model_map:
-            raise ValueError(f"Unsupported model: {model_name}")
-        
-        hyperparams = {}
+    def parse_hyperparameters(self, hyperparameters: str) -> dict:
+        """Parse hyperparameters string into dictionary with proper types"""
+        params = {}
         try:
             for param in hyperparameters.split(", "):
                 key, value = param.split("=")
-                if value.isdigit():
-                    hyperparams[key] = int(value)
+                key = key.strip()
+                value = value.strip("'\"")
+                
+                # Convert to appropriate type
+                if value.lower() == 'true':
+                    params[key] = True
+                elif value.lower() == 'false':
+                    params[key] = False
+                elif value.isdigit():
+                    params[key] = int(value)
                 elif value.replace(".", "").isdigit():
-                    hyperparams[key] = float(value)
+                    params[key] = float(value)
                 else:
-                    hyperparams[key] = value.strip("'\"")
+                    params[key] = value
+            return params
         except Exception as e:
-            # logger.error(f"Error parsing hyperparameters '{hyperparameters}': {e}")
-            return {"accuracy": 0.0}
+            logger.error(f"Failed to parse hyperparameters: {hyperparameters} - {str(e)}")
+            raise ValueError(f"Invalid hyperparameter format: {str(e)}")
 
-        model_class = self.model_map[model_name]
-        model = model_class(**hyperparams)
-        pipeline = Pipeline([
-            ("scaler", StandardScaler()),
-            ("classifier", model)
-        ])
-        
+    def __call__(self, model_name: str, hyperparameters: str) -> Dict[str, float]:
+        """Evaluate model and return results as dictionary"""
         try:
+            if model_name not in self.model_map:
+                raise ValueError(f"Unsupported model: {model_name}")
+            
+            # Parse and create model
+            hyperparams = self.parse_hyperparameters(hyperparameters)
+            model = self.model_map[model_name](**hyperparams)
+            pipeline = Pipeline([
+                ("scaler", StandardScaler()),
+                ("classifier", model)
+            ])
+            
+            # Evaluate
             scores = cross_val_score(pipeline, self.X, self.y, cv=5, scoring="accuracy")
             mean_accuracy = float(scores.mean())
             
-            # Fit the pipeline on full dataset and store it
+            # Fit and store pipeline
             pipeline.fit(self.X, self.y)
             self.current_pipeline = pipeline
             
-            # logger.info(f"Evaluated {model_name} with {hyperparams}, Accuracy: {mean_accuracy:.4f}")
             return {"accuracy": mean_accuracy}
+            
         except Exception as e:
-            # logger.error(f"Error evaluating {model_name} with hyperparameters {hyperparams}: {e}")
-            self.current_pipeline = None
+            logger.error(f"Evaluation failed: {str(e)}")
             return {"accuracy": 0.0}
 
 class EvaluationAgent(Agent):
@@ -77,12 +91,14 @@ class EvaluationAgent(Agent):
         super().__init__(
             name="evaluation",
             model="gemini-2.0-flash",
-            instruction="You are an evaluation agent. Given a model name and hyperparameters, use the evaluate_model tool to evaluate it on the dataset and return a JSON object: {\"accuracy\": float}",
+            instruction="""You are an evaluation agent. Given a model name and hyperparameters, evaluate the model using the evaluate_model tool.
+            The tool will return a dictionary with an accuracy value.
+            Return the EXACT same accuracy value in the following format:
+            {"accuracy": <accuracy_value>}""",
             tools=[self._evaluate_tool],
             disallow_transfer_to_parent=True,
             disallow_transfer_to_peers=True
         )
 
     def get_current_pipeline(self) -> Optional[Pipeline]:
-        """Get the currently fitted pipeline"""
         return self._evaluate_tool.get_current_pipeline()
