@@ -245,17 +245,17 @@ def main():
 
                 # Run decision for this recommendation
                 decision_input = f"""Decide whether to accept {rec['model']} with accuracy {eval_result['accuracy']:.4f}.
-Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history", []))}"""
+Previous results: {json.dumps(previous_results)}"""
 
                 decision = make_decision(
                     runners["decision"],
                     rec,
                     eval_result,
-                    sessions["decision"].state.get("evaluation_history", []),
+                    previous_results,  # <-- pass correct previous_results here
                     iteration,
                     timestamp,
                     config.session_ids["decision"],
-                    config  # Pass config here
+                    config
                 )
 
                 if decision and decision.get("accept"):
