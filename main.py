@@ -204,12 +204,16 @@ def main():
 
             # Log recommender conversation immediately
             save_conversation({
-                "iteration": iteration + 1,
+                "iteration": iteration,
                 "agent": "recommender",
                 "input": user_input,
                 "output": recommendations,
                 "status": "success" if recommendations else "failed"
             }, timestamp)
+            
+            # Process each recommendation
+            best_recommendation = None
+            best_rec_accuracy = 0.0
             
             for rec in recommendations:
                 model_name = rec.get('model')
@@ -230,11 +234,10 @@ def main():
                     logger.warning(f"Skipping decision for failed evaluation of {model_name}")
                     continue
 
-                # Prepare decision input string here so it can be logged later
+                # Run decision for this recommendation
                 decision_input = f"""Decide whether to accept {rec['model']} with accuracy {eval_result['accuracy']:.4f}.
 Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history", []))}"""
 
-                # Run decision with explicit session ID
                 decision = make_decision(
                     runners["decision"],
                     rec,
@@ -244,54 +247,28 @@ Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history
                     timestamp,
                     config.session_ids["decision"]
                 )
-                
-                # Update state in correct session
-                if decision and decision.get("accept"):
-                    if "evaluation_history" not in sessions["decision"].state:
-                        sessions["decision"].state["evaluation_history"] = []
-                        
-                    current_result = {
-                        "model": rec["model"],
-                        "hyperparameters": rec["hyperparameters"],
-                        "accuracy": decision["accuracy"],
-                        "accept": decision["accept"],
-                        "reasoning": decision["reasoning"]
-                    }
-                    sessions["decision"].state["evaluation_history"].append(current_result)
 
-                # Store in session state (use recommender session for global history)
+                if decision and decision.get("accept"):
+                    current_accuracy = decision.get("accuracy", 0.0)
+                    if current_accuracy > best_rec_accuracy:
+                        best_rec_accuracy = current_accuracy
+                        best_recommendation = {
+                            "model": model_name,
+                            "hyperparameters": hyperparameters,
+                            "accuracy": current_accuracy,
+                            "accept": True,
+                            "reasoning": decision.get("reasoning", "")
+                        }
+
+            # Update state with best recommendation from this iteration
+            if best_recommendation:
                 if "evaluation_history" not in sessions["recommender"].state:
                     sessions["recommender"].state["evaluation_history"] = []
+                sessions["recommender"].state["evaluation_history"].append(best_recommendation)
                 
-                # Add to evaluation history
-                current_result = {
-                    "model": model_name,
-                    "hyperparameters": hyperparameters,
-                    "accuracy": decision["accuracy"],
-                    "accept": decision["accept"],
-                    "reasoning": decision["reasoning"]
-                }
-                sessions["recommender"].state["evaluation_history"].append(current_result)
-                
-                # Log decision conversation immediately
-                save_conversation({
-                    "iteration": iteration + 1,
-                    "agent": "decision",
-                    "model": model_name,
-                    "input": decision_input,
-                    "output": decision,
-                    "status": "success"
-                }, timestamp)
-
-                logger.info(f"Result: Accuracy={decision['accuracy']:.4f}, Accept={decision['accept']}, Reasoning={decision['reasoning']}")
-                
-                # Update best model if better accuracy found
-                if decision["accuracy"] > best_accuracy:
-                    best_accuracy = decision["accuracy"]
-                    best_model = current_result.copy()
-                    
-                # Only break from decision loop, not entire iteration
-                break
+                if best_rec_accuracy > best_accuracy:
+                    best_accuracy = best_rec_accuracy
+                    best_model = best_recommendation.copy()
 
             # Check optimization criteria
             if best_model:
