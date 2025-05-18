@@ -52,17 +52,17 @@ def save_conversation(data, timestamp: str):
     existing["last_updated"] = datetime.now().isoformat()
     json.dump(existing, open(log_file, 'w'), indent=2, cls=ConfigEncoder)
 
-def run_agent(runner, message, session_id: str):
+def run_agent(runner, message, session_id: str, config: OptiMindConfig):
     """Run agent with proper session ID and rate limiting"""
     rate_limiter = RateLimitHandler(
         calls_per_minute=10,
-        max_retries=3,
-        initial_delay=1.0
+        max_retries=config.max_retries,
+        initial_delay=config.rate_limit_delay
     )
     
     def _run_with_session():
         for event in runner.run(
-            user_id="user123",
+            user_id=config.user_id,  # Use config's user_id
             session_id=session_id,
             new_message=message
         ):
@@ -100,10 +100,10 @@ def parse_recommendations(event):
     except:
         return []
 
-def evaluate_model(runner, rec, iteration, timestamp, session_id):
+def evaluate_model(runner, rec, iteration, timestamp, session_id, config):
     eval_input = f"Evaluate {rec['model']} with {rec['hyperparameters']}"
     eval_message = types.Content(role="user", parts=[types.Part(text=eval_input)])
-    eval_event = run_agent(runner, eval_message, session_id)
+    eval_event = run_agent(runner, eval_message, session_id, config)
     result = {"accuracy": 0.0, "success": False}
     if eval_event:
         try:
@@ -122,11 +122,11 @@ def evaluate_model(runner, rec, iteration, timestamp, session_id):
     }, timestamp)
     return result
 
-def make_decision(runner, rec, eval_result, previous_results, iteration, timestamp, session_id):
+def make_decision(runner, rec, eval_result, previous_results, iteration, timestamp, session_id, config):
     decision_input = f"""Decide whether to accept {rec['model']} with accuracy {eval_result['accuracy']:.4f}.
 Previous results: {json.dumps(previous_results)}"""
     decision_message = types.Content(role="user", parts=[types.Part(text=decision_input)])
-    decision_event = run_agent(runner, decision_message, session_id)
+    decision_event = run_agent(runner, decision_message, session_id, config)
     if not decision_event:
         return None
     try:
@@ -201,7 +201,8 @@ def main():
             event = run_agent(
                 runners["recommender"], 
                 message, 
-                config.session_ids["recommender"]
+                config.session_ids["recommender"],
+                config
             )
             recommendations = parse_recommendations(event)
 
@@ -234,7 +235,8 @@ def main():
                     rec, 
                     iteration,
                     timestamp,
-                    config.session_ids["evaluator"]
+                    config.session_ids["evaluator"],
+                    config  # Pass config here
                 )
 
                 if eval_result.get("accuracy", 0) == 0:
@@ -252,7 +254,8 @@ Previous results: {json.dumps(sessions["decision"].state.get("evaluation_history
                     sessions["decision"].state.get("evaluation_history", []),
                     iteration,
                     timestamp,
-                    config.session_ids["decision"]
+                    config.session_ids["decision"],
+                    config  # Pass config here
                 )
 
                 if decision and decision.get("accept"):
