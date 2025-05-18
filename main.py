@@ -1,268 +1,240 @@
-from typing import List, Dict, Any
-import pandas as pd
-from sklearn.datasets import load_iris
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from agents.recommender.agent import RecommenderAgent
-from agents.evaluator.agent import EvaluatorAgent
+import asyncio
 import json
 import logging
-from dotenv import load_dotenv
+import pandas as pd
 import os
-import joblib
-import time
-import shutil  # Added for copying files
+from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
+import google.generativeai as genai
+from google.adk.sessions import InMemorySessionService
+from google.adk.runners import Runner
+from google.genai import types
+from agents.recommender import RecommenderAgent
+from agents.evaluation import EvaluationAgent
+from agents.decision import DecisionAgent
+from sklearn.datasets import load_iris
+from config import OptimizationConfig, OptimizationComplete
 
 # Load environment variables
 load_dotenv()
 
-# Create module-level logger
+# Configure Google AI
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise ValueError("GEMINI_API_KEY environment variable is not set")
+genai.configure(api_key=api_key)
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Model map for re-instantiating models before saving
-MODEL_CLASS_MAP = {
-    "RandomForestClassifier": RandomForestClassifier,
-    "LogisticRegression": LogisticRegression,
-    "SVC": SVC
-}
+# Only keep conversation logging
+OUTPUT_DIR = Path("output")
+LOGS_DIR = OUTPUT_DIR / "conversations"
 
-def configure_logger(verbose: bool):
-    """
-    Configure the root logger level.
-    If verbose=True, show INFO and above; if False, only WARNING and above.
-    """
-    level = logging.INFO if verbose else logging.WARNING
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    logger.setLevel(level)
+def setup_directories():
+    """Create necessary directories for output"""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-def parse_llm_response(response_str: str) -> Any:
-    """Clean and parse LLM response, removing code block markers if present."""
-    if response_str.startswith("```json") and response_str.endswith("```"):
-        json_str = response_str[len("```json"):-len("```")].strip()
-    else:
-        json_str = response_str.strip()
-    try:
-        return json.loads(json_str)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON: {e}, Raw response: {response_str}")
-        return None
+def save_conversation(conversation_history: list, timestamp: str, metadata: dict = None):
+    """Save agent conversations with detailed information"""
+    log_file = LOGS_DIR / f"conversation_{timestamp}.json"
+    conversation_data = {
+        "timestamp": timestamp,
+        "metadata": metadata,
+        "interactions": conversation_history
+    }
+    print('~~~~ Saving to log_file')
+    print(conversation_data)
+    with open(log_file, "w") as f:
+        json.dump(conversation_data, f, indent=2)
 
-def run_optimization(
-    X: pd.DataFrame,
-    y: pd.Series,
-    max_iterations: int = 10,
-    accuracy_threshold: float = 0.99,
-    verbose: bool = True
-) -> List[Dict[str, Any]]:
-    """Run the multi-agent optimization loop and save artifacts."""
-    configure_logger(verbose)
-    recommender = RecommenderAgent()
-    evaluator = EvaluatorAgent(X, y)
-    results: List[Dict[str, Any]] = []
-    previous_results = ""
+async def main():
+    # Setup output directory
+    setup_directories()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Prepare artifact folders
-    artifacts_dir = "artifacts"
-    models_dir = os.path.join(artifacts_dir, "models")
-    results_dir = os.path.join(artifacts_dir, "results")
-    os.makedirs(models_dir, exist_ok=True)
-    os.makedirs(results_dir, exist_ok=True)
+    # Initialize configuration
+    config = OptimizationConfig(
+        max_iterations=5,  # Adjust default values here
+        min_accuracy=0.85,
+        target_accuracy=0.95,
+        exploration_ratio=0.3
+    )
 
-    stop_due_to_threshold = False
+    # Initialize conversation history
+    conversation_history = []
 
-    for iteration in range(max_iterations):
-        logger.info(f"Iteration {iteration + 1}/{max_iterations}")
-        recommendations_str = recommender.recommend(X, y, previous_results)
-        recommendations = parse_llm_response(recommendations_str) or []
+    # Load dataset (replace with your dataset)
+    data = load_iris()
+    X = pd.DataFrame(data.data, columns=data.feature_names)
+    y = pd.Series(data.target)
 
-        # Parse hyperparameters from strings to dicts
-        parsed_recommendations = []
-        for rec in recommendations:
-            model_name = rec.get("model")
-            if model_name not in recommender.model_map:
-                logger.warning(f"Unsupported model recommended: {model_name}")
-                continue
+    # Set up session
+    session_service = InMemorySessionService()
+    session_id = "session123"
+    user_id = "user123"
+    session = session_service.create_session(app_name="opti_mind_tune", user_id=user_id, session_id=session_id)
 
-            hyperparams_str = rec.get("hyperparameters", "")
-            hp_dict: Dict[str, Any] = {}
-            try:
-                for pair in hyperparams_str.split(","):
-                    if "=" not in pair:
-                        continue
-                    key, value = pair.split("=", 1)
-                    key = key.strip()
-                    val = value.strip().strip("'\"")
-                    # convert to int or float if possible
-                    try:
-                        val = int(val)
-                    except ValueError:
-                        try:
-                            val = float(val)
-                        except ValueError:
-                            pass
-                    hp_dict[key] = val
-            except Exception as e:
-                logger.error(f"Failed parsing hyperparams: {e} — raw: {hyperparams_str}")
-                continue
+    # Initialize agents
+    recommender_agent = RecommenderAgent()
+    evaluation_agent = EvaluationAgent(X, y)
+    decision_agent = DecisionAgent()
 
-            rec["hyperparameters"] = hp_dict
-            parsed_recommendations.append(rec)
+    # Initialize runners
+    recommender_runner = Runner(agent=recommender_agent, app_name="opti_mind_tune", session_service=session_service)
+    evaluation_runner = Runner(agent=evaluation_agent, app_name="opti_mind_tune", session_service=session_service)
+    decision_runner = Runner(agent=decision_agent, app_name="opti_mind_tune", session_service=session_service)
 
-        if not parsed_recommendations:
-            logger.info("No valid recommendations this iteration.")
-            if not results:
-                logger.warning("No prior results either; stopping early.")
-                break
+    max_iterations = 2
+    best_model = None
+    best_accuracy = 0.0
 
-        iteration_summary: List[str] = []
-
-        for idx, rec in enumerate(parsed_recommendations):
-            model_name = rec["model"]
-            hyperparams = rec["hyperparameters"]
-            logger.info(f"Evaluating {model_name} with {hyperparams}")
-
-            eval_response = evaluator.evaluate_and_suggest(model_name, hyperparams, previous_results)
-            eval_result = parse_llm_response(eval_response)
-            if not eval_result:
-                logger.warning(f"Invalid eval response for {model_name}; skipping.")
-                continue
-
-            accuracy = eval_result.get("accuracy", 0.0)
-            accept = eval_result.get("accept", False)
-            reasoning = eval_result.get("reasoning", "")
-
-            result_record = {
-                "iteration": iteration + 1,
-                "recommendation_index": idx + 1,
-                "model": model_name,
-                "hyperparameters": hyperparams,
-                "accuracy": accuracy,
-                "accept": accept,
-                "reasoning": reasoning,
-                "saved_model_path": None
-            }
-
-            if accept:
-                logger.info(f"Accepted {model_name} @ {accuracy:.4f}")
-                try:
-                    model_cls = MODEL_CLASS_MAP[model_name]
-                    # adjust for l1+saga
-                    if model_name == "LogisticRegression":
-                        if hyperparams.get("solver") == "saga" and hyperparams.get("penalty") == "l1":
-                            hyperparams.setdefault("max_iter", 1000)
-
-                    pipeline = Pipeline([
-                        ("scaler", StandardScaler()),
-                        ("clf", model_cls(**hyperparams))
-                    ])
-                    pipeline.fit(X, y)
-
-                    ts = time.strftime("%Y%m%d_%H%M%S")
-                    fname = f"{model_name}_iter{iteration+1}_rec{idx+1}_{ts}.joblib"
-                    fpath = os.path.join(models_dir, fname)
-                    joblib.dump(pipeline, fpath)
-                    result_record["saved_model_path"] = fpath
-                    logger.info(f"Model saved to {fpath}")
-                except Exception as e:
-                    logger.error(f"Error saving model: {e}")
-
-            results.append(result_record)
-
-            iteration_summary.append(
-                f"{model_name} with {hyperparams} → acc={accuracy:.4f}, "
-                f"accept={accept}, saved={bool(result_record['saved_model_path'])}"
-            )
-            logger.info("Detailed: " + iteration_summary[-1])
-
-            if accept and accuracy >= accuracy_threshold:
-                logger.info(f"Threshold {accuracy_threshold} reached; stopping.")
-                stop_due_to_threshold = True
-                break
-
-        previous_results = "\n".join(iteration_summary)
-        if stop_due_to_threshold:
-            break
-
-    if not stop_due_to_threshold:
-        logger.info("Finished all iterations or no more valid recs.")
-
-    # Save results JSON
-    ts_all = time.strftime("%Y%m%d_%H%M%S")
-    results_file = os.path.join(results_dir, f"optimization_results_{ts_all}.json")
     try:
-        with open(results_file, "w") as f:
-            json.dump(results, f, indent=4)
-        logger.info(f"Results JSON saved to {results_file}")
-    except Exception as e:
-        logger.error(f"Failed writing results JSON: {e}")
+        for iteration in range(config.max_iterations):
+            logger.info(f"Starting iteration {iteration + 1}/{config.max_iterations}")
 
-    return results
+            # Run recommender
+            previous_results = session.state.get("evaluation_history", [])
+            user_input = f"""
+Dataset Metadata:
+n_samples: {X.shape[0]}
+n_features: {X.shape[1]}
+n_classes: {len(y.unique())}
+class_balance: {y.value_counts(normalize=True).to_dict()}
+
+Previous Results (if any):
+{json.dumps(previous_results)}
+
+Supported Models: RandomForestClassifier, LogisticRegression, SVC
+
+Respond with a JSON object: {{"recommendations": [{{"model": "ModelName", "hyperparameters": "param1=value1, param2=value2", "reasoning": "Your reasoning"}}]}}
+"""
+            message = types.Content(role="user", parts=[types.Part(text=user_input)])
+            
+            recommendations = []
+            async for event in recommender_runner.run_async(user_id=user_id, session_id=session_id, new_message=message):
+                if event.is_final_response():
+                    try:
+                        response_json = json.loads(event.content.parts[0].text)
+                        recommendations = response_json.get('recommendations', [])
+                        logger.info(f"Received recommendations: {recommendations}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse recommendations: {e}")
+                        continue
+                    break
+
+            if not recommendations:
+                logger.error("No valid recommendations received")
+                continue
+
+            # Log recommender conversation
+            conversation_history.append({
+                "iteration": iteration + 1,
+                "agent": "recommender",
+                "input": user_input,
+                "output": recommendations
+            })
+            
+            for rec in recommendations:
+                model_name = rec.get('model')
+                hyperparameters = rec.get('hyperparameters')
+                reasoning = rec.get('reasoning')
+                logger.info(f"Evaluating {model_name} with {hyperparameters} (Reason: {reasoning})")
+
+                # Run evaluation
+                eval_input = f"Evaluate {model_name} with {hyperparameters} using evaluate_model tool. Return JSON: {{'accuracy': float}}"
+                eval_message = types.Content(role="user", parts=[types.Part(text=eval_input)])
+                async for eval_event in evaluation_runner.run_async(user_id=user_id, session_id=session_id, new_message=eval_message):
+                    if eval_event.is_final_response():
+                        try:
+                            eval_response = json.loads(eval_event.content.parts[0].text)
+                            accuracy = eval_response["accuracy"]
+                            # Get the trained pipeline from the agent
+                            model_object = evaluation_agent.get_current_pipeline()
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.error(f"Failed to parse evaluation response: {e}")
+                            accuracy = 0.0
+                            model_object = None
+                        break
+                else:
+                    logger.error("No evaluation response")
+                    continue
+
+                # Log evaluation conversation
+                conversation_history.append({
+                    "iteration": iteration + 1,
+                    "agent": "evaluator",
+                    "model": model_name,
+                    "input": eval_input,
+                    "output": {"accuracy": accuracy}
+                })
+                
+                # Run decision
+                decision_input = f"Decide whether to accept {model_name} with accuracy {accuracy}. Previous results: {json.dumps(previous_results)}"
+                decision_message = types.Content(role="user", parts=[types.Part(text=decision_input)])
+                async for decision_event in decision_runner.run_async(user_id=user_id, session_id=session_id, new_message=decision_message):
+                    if decision_event.is_final_response():
+                        try:
+                            decision = json.loads(decision_event.content.parts[0].text)
+                            # Store in session state
+                            if "evaluation_history" not in session.state:
+                                session.state["evaluation_history"] = []
+                            
+                            # Add to evaluation history
+                            current_result = {
+                                "model": model_name,
+                                "hyperparameters": hyperparameters,
+                                "accuracy": decision["accuracy"],
+                                "accept": decision["accept"],
+                                "reasoning": decision["reasoning"]
+                            }
+                            session.state["evaluation_history"].append(current_result)
+                            
+                            # Log decision conversation
+                            conversation_history.append({
+                                "iteration": iteration + 1,
+                                "agent": "decision",
+                                "input": decision_input,
+                                "output": decision
+                            })
+
+                            logger.info(f"Result: Accuracy={decision['accuracy']:.4f}, Accept={decision['accept']}, Reasoning={decision['reasoning']}")
+                            
+                            # Update best model if better accuracy found
+                            if decision["accuracy"] > best_accuracy:
+                                best_accuracy = decision["accuracy"]
+                                best_model = current_result.copy()
+                                
+                            # Only break from decision loop, not entire iteration
+                            break
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.error(f"Failed to parse decision response: {e}")
+                        break
+
+            # Check optimization criteria
+            if best_model:
+                if best_accuracy >= config.target_accuracy:
+                    # Allow some exploration based on exploration_ratio
+                    if iteration >= config.max_iterations * config.exploration_ratio:
+                        logger.info(f"Found excellent model with accuracy {best_accuracy:.4f}, stopping search")
+                        raise OptimizationComplete
+                elif best_accuracy < config.min_accuracy:
+                    logger.warning(f"Current best accuracy {best_accuracy:.4f} below minimum threshold")
+
+    except OptimizationComplete:
+        logger.info("Optimization completed successfully")
+    finally:
+        # Save final results
+        final_metadata = {
+            "config": vars(config),
+            "total_iterations": iteration + 1,
+            "best_model": best_model,
+            "best_accuracy": best_accuracy
+        }
+        save_conversation(conversation_history, timestamp, final_metadata)
+        logger.info(f"Optimization completed after {iteration + 1} iterations")
+        logger.info(f"Best model found: {best_model}")
 
 if __name__ == "__main__":
-    # Load data
-    iris = load_iris()
-    X_df = pd.DataFrame(iris.data, columns=iris.feature_names)
-    y_series = pd.Series(iris.target)
-
-    # Run with verbose=True or False
-    final_results = run_optimization(
-        X_df,
-        y_series,
-        max_iterations=5,
-        accuracy_threshold=0.97,
-        verbose=True  # ← set to True to see full log, False to suppress intermediates
-    )
-
-    # Always show final summary
-    # Temporarily bump logger to INFO if it was suppressed
-    logger.setLevel(logging.INFO)
-    logger.info("\n=== Final Optimization Summary ===")
-    if final_results:
-        for r in final_results:
-            logger.info(
-                f"Iter{r['iteration']}-Rec{r['recommendation_index']}: "
-                f"{r['model']} @ {r['accuracy']:.4f}, accept={r['accept']}, "
-                f"saved={bool(r['saved_model_path'])}"
-            )
-    else:
-        logger.info("No results returned.")
-
-    # Select best model
-    best_info = None
-    best_acc = -1.0
-    for r in final_results:
-        if r['accept'] and r['accuracy'] > best_acc and r['saved_model_path'] and os.path.exists(r['saved_model_path']):
-            best_acc = r['accuracy']
-            best_info = r
-
-    if best_info:
-        logger.info("\n--- Best Model ---")
-        logger.info(f"{best_info['model']} @ {best_info['accuracy']:.4f}")
-        logger.info(f"Params: {best_info['hyperparameters']}")
-        logger.info(f"Path: {best_info['saved_model_path']}")
-
-        best_dir = os.path.join("artifacts", "best_model")
-        os.makedirs(best_dir, exist_ok=True)
-        dest = os.path.join(best_dir, "best_model.joblib")
-        try:
-            shutil.copy(best_info['saved_model_path'], dest)
-            logger.info(f"Copied to {dest}")
-        except Exception as e:
-            logger.error(f"Error copying best: {e}")
-
-        details_path = os.path.join(best_dir, "best_model_details.json")
-        try:
-            with open(details_path, "w") as f:
-                json.dump(best_info, f, indent=4)
-            logger.info(f"Details saved to {details_path}")
-        except Exception as e:
-            logger.error(f"Error saving details: {e}")
-    else:
-        logger.info("No acceptable model to mark as best.")
+    asyncio.run(main())

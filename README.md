@@ -35,6 +35,9 @@ OptiMindTune employs two specialized AI agents built using the Google ADK (Agent
 * **Extensible:** Built with the Google ADK, making it a good base for adding more models, evaluation metrics, or even more sophisticated agent interactions.
 * **Clear Logging & Feedback:** Get insights into the decision-making process of each agent.
 * **Focus on Scikit-learn:** Integrates directly with popular scikit-learn classifiers.
+* **Model Persistence:** Automatically saves trained models and their metadata for future use
+* **Conversation Logging:** Records all interactions between agents for analysis and debugging
+* **Structured Output:** Organizes models and logs in a clear directory structure
 
 ---
 
@@ -99,22 +102,96 @@ The script will load the Iris dataset (by default) and initiate the Recommender 
 - The process will continue for a set number of iterations or until an accuracy threshold is met. Final results will be printed to the console.
 
 ## 💡 How It Works: The Optimization Loop
-1. **Initialization**: `main.py` loads the dataset (e.g., Iris) and initializes `RecommenderAgent` and `EvaluatorAgent`.
-2. **Recommendation**: The `RecommenderAgent` is called.
-    - It receives dataset metadata and any previous results.
-    - It queries Gemini to suggest 1-2 `(model_name, hyperparameters_string, reasoning) `sets.
-3. **Parsing & Preparation**: main.py parses the Recommender's JSON response.
-4. **Evaluation**: For each valid recommendation:
-    - The `EvaluatorAgent` is invoked with the model_name, parsed hyperparameters_dict, and previous_results.
-    - The `EvaluatorAgent` prompts Gemini, instructing it to use the EvaluateModelTool.
-    - The `EvaluateModelTool` performs 5-fold cross-validation on the scaled data.
-    - The accuracy is returned to the Gemini model within the EvaluatorAgent.
-    - Gemini then provides a JSON response: {"accuracy": ..., "accept": ..., "reasoning": ...}.
-5. **Decision & Iteration**:
-    - `main.py `logs the evaluation result.
-    - If a model is `accepted` and meets the `accuracy_threshold`, the optimization stops.
-    - Otherwise, the results from this iteration become `previous_results` for the next call to the `RecommenderAgent`.
-6. **Termination**: The loop stops if the `accuracy_threshold` is met or `max_iterations` are reached.
+
+1. **Initialization & Setup:**
+   - Load dataset and environment configurations
+   - Create output directories for models and conversation logs
+   - Initialize the three agents: Recommender, Evaluator, and Decision
+
+2. **The Optimization Loop:**
+   - **Recommender Phase:**
+     - Analyzes dataset metadata (samples, features, classes, balance)
+     - Reviews previous evaluation results
+     - Suggests 1-2 models with hyperparameters and reasoning
+     - Records recommendations in conversation history
+
+   - **Evaluation Phase:**
+     - Tests each recommended model using cross-validation
+     - Applies standard scaling through a pipeline
+     - Stores the fitted model for later use
+     - Logs evaluation results and accuracy
+
+   - **Decision Phase:**
+     - Analyzes the model's performance
+     - Considers historical results
+     - Decides whether to accept or continue searching
+     - If accepted:
+       - Saves the complete model pipeline
+       - Stores detailed metadata
+       - Records the decision reasoning
+
+3. **Output Generation:**
+   - **Models:** Each accepted model is saved with:
+     - Full pipeline (scaler + model) as joblib file
+     - Detailed metadata (configuration, performance, timestamps)
+   - **Conversations:** Complete interaction history including:
+     - All agent inputs/outputs
+     - Reasoning and decisions
+     - Performance metrics
+     - Timestamps
+
+4. **Termination:**
+   - When an acceptable model is found
+   - When maximum iterations are reached
+   - All results and conversations are persisted
+
+## 📁 Output Structure
+
+```
+output/
+├── models/                           # Stores accepted models
+│   └── YYYYMMDD_HHMMSS/             # Timestamp-based directories
+│       ├── model.joblib             # Serialized pipeline (scaler + model)
+│       └── metadata.json            # Model configuration and results
+└── conversations/                   # Stores agent interactions
+    └── conversation_YYYYMMDD_HHMMSS.json
+```
+
+### Model Storage Details
+- Complete scikit-learn pipeline including preprocessing
+- Hyperparameter configurations
+- Cross-validation results
+- Timestamps and iteration information
+- Performance metrics
+
+### Conversation Logs Structure
+```json
+[
+  {
+    "iteration": 1,
+    "agent": "recommender",
+    "input": "dataset metadata and previous results",
+    "output": "model recommendations with reasoning"
+  },
+  {
+    "iteration": 1,
+    "agent": "evaluator",
+    "model": "model name",
+    "input": "evaluation request",
+    "output": {"accuracy": 0.95}
+  },
+  {
+    "iteration": 1,
+    "agent": "decision",
+    "input": "performance data",
+    "output": {
+      "accept": true,
+      "accuracy": 0.95,
+      "reasoning": "acceptance reasoning"
+    }
+  }
+]
+```
 
 ## 🔮 Future Enhancements & Roadmap
 
