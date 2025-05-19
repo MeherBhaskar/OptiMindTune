@@ -49,7 +49,6 @@ OptiMindTune uses three specialized AI agents to automate the model selection an
 
 ## ⚙️ Features
 
-- **Rate-Limited API Usage:** Smart handling of Gemini API quotas
 - **Real-Time Logging:** Detailed agent interaction history
 - **Configurable Goals:** Adjustable accuracy and exploration targets
 - **Cross-Validation:** Robust model evaluation
