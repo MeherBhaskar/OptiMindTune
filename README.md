@@ -55,14 +55,6 @@ OptiMindTune uses three specialized AI agents to automate the model selection an
 - **Error Handling:** Graceful failure recovery
 - **Conversation Tracking:** Complete interaction history
 
-## 🛠️ Technical Stack
-
-- Python 3.10+
-- Google ADK & Gemini API
-- scikit-learn
-- pandas
-- Async I/O
-
 ## 🚀 Quick Start
 
 1. **Setup**
@@ -126,10 +118,9 @@ output/
 
 ## 🔮 Future Enhancements
 
-- Expanded model support (XGBoost, LightGBM)
+- Expanded model support
 - Regression task support
 - Custom metric optimization
 - Parallel evaluation
-- Web interface
 - MLflow/W&B integration
 - Custom agent strategies
