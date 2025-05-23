@@ -4,3 +4,4 @@ python-dotenv==1.1.0
 scikit-learn
 pandas
 numpy
+optuna>=3.4.0

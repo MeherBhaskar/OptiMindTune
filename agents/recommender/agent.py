@@ -15,7 +15,7 @@ class RecommenderAgent(Agent):
         super().__init__(
             name="recommender",
             model=model,
-            instruction="You are an expert AI agent for AutoML. Given the dataset metadata and previous evaluation results, recommend 1-2 scikit-learn classification models and specific hyperparameter configurations to try next. If no previous results exist, suggest initial models and hyperparameters. Provide a brief reasoning for each recommendation. Respond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2\", \"reasoning\": \"Your reasoning\"}]}",
+            instruction="You are an expert AI agent for AutoML. Given the dataset metadata and previous evaluation results, recommend 1-2 scikit-learn classification models and specific hyperparameter configurations to try next. If no previous results exist, suggest initial models and hyperparameters. Provide a brief reasoning for each recommendation. Respond with a JSON object: {\"recommendations\": [{\"model\": \"ModelName\", \"hyperparameters\": \"param1=value1, param2=value2 param3=value3\", \"reasoning\": \"Your reasoning\"}]}",
             output_schema=RecommendationOutput,
             output_key="recommendations",
             disallow_transfer_to_parent=True,
