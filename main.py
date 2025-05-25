@@ -19,6 +19,8 @@ from config import OptiMindConfig, OptimizationComplete
 from typing import List, Dict, Any
 from utils.rate_limiter import RateLimitHandler
 
+# Note: For Bayesian optimization benchmarks, run bayesian_benchmark.py separately
+
 # Load environment variables
 load_dotenv()
 
@@ -329,6 +331,7 @@ def main():
             csv_rows.append({
                 "timestamp": timestamp,
                 "dataset": dataset_name,
+                "optimizer": "LLM",  # Add optimizer type for comparison with Bayesian results
                 "model": best_model["model"] if best_model else None,
                 "best_accuracy": best_accuracy,
                 "optimization_time": optimization_time,
