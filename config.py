@@ -12,7 +12,7 @@ class OptiMindConfig:
 
     # Session configuration
     app_name: str = "opti_mind_tune"
-    user_id: str = "bhaskar_new"
+    user_id: str = "user"
     session_ids: Dict[str, str] = field(default_factory=lambda: {
         "recommender": "rec_session",
         "evaluator": "eval_session",
