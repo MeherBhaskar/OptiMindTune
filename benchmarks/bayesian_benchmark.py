@@ -4,12 +4,10 @@ Runs Bayesian optimization on the same datasets and models for comparison.
 """
 import logging
 import pandas as pd
-import numpy as np
 from pathlib import Path
 from datetime import datetime
 import time
 from sklearn.datasets import load_iris, load_wine, load_breast_cancer
-from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
@@ -20,7 +18,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Output directories
-OUTPUT_DIR = Path("output")
+BASE_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = BASE_DIR / "output"
 CSV_DIR = OUTPUT_DIR / "bayesian_benchmarks"
 CSV_DIR.mkdir(parents=True, exist_ok=True)
 

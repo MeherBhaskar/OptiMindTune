@@ -5,3 +5,4 @@ scikit-learn
 pandas
 numpy
 optuna>=3.4.0
+scikit-optimize

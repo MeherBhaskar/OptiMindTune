@@ -1,6 +1,5 @@
 import logging
 import pandas as pd
-import numpy as np
 import time
 from datetime import datetime
 import json
@@ -16,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Output directory setup
-OUTPUT_DIR = Path("output")
+BASE_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = BASE_DIR / "output"
 LOGS_DIR = OUTPUT_DIR / "optuna_benchmarks"
 CSV_DIR = OUTPUT_DIR / "csv_results"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -72,8 +72,8 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     models = ["RandomForestClassifier", "LogisticRegression"]#, "SVC"]
     datasets = {
-        # 'iris': load_iris(),
-        # 'wine': load_wine(),
+        'iris': load_iris(),
+        'wine': load_wine(),
         'breast_cancer': load_breast_cancer()
     }
     
