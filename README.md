@@ -1,6 +1,9 @@
-# OptiMindTune: Multi-Agent AutoML with Gemini 🧠✨
+# OptiMindTune: Multi-Agent AutoML 🧠✨
 
-A collaborative multi-agent system for intelligent hyperparameter optimization powered by Google's Gemini models.
+[![arXiv](https://img.shields.io/badge/arXiv-2505.19205-b31b1b.svg)](https://arxiv.org/abs/2505.19205) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/optimindtune-a-multi-agent-framework-for/automl-on-wine)](https://paperswithcode.com/sota/automl-on-wine?p=optimindtune-a-multi-agent-framework-for) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/optimindtune-a-multi-agent-framework-for/automl-on-breast-cancer-coimbra-data-set)](https://paperswithcode.com/sota/automl-on-breast-cancer-coimbra-data-set?p=optimindtune-a-multi-agent-framework-for)
+
+
+A collaborative multi-agent system for intelligent hyperparameter optimization powered by large language models.
 
 ## 🎯 Overview
 
